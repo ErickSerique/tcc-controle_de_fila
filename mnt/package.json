@@ -1,0 +1,16 @@
+{
+  "name": "fila-io",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently --names SERVER,CLIENT --prefix-colors cyan,green \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "install:all": "npm install && npm install --workspace=server && npm install --workspace=client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

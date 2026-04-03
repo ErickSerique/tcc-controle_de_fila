@@ -1,0 +1,29 @@
+# Dependências
+node_modules/
+mnt/client/node_modules/
+mnt/server/node_modules/
+
+# Build
+dist/
+mnt/client/dist/
+mnt/server/dist/
+
+# Ambiente
+.env
+.env.*
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Editor / Sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Cache
+.vite/
+coverage/
