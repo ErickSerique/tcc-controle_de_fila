@@ -33,6 +33,7 @@ export default function App() {
       return (
         <HostSetupScreen
           onRoomCreated={(code, room) => navigate("host-panel", { roomCode: code, room })}
+          onBack={() => navigate("landing")}
         />
       );
 
@@ -42,6 +43,7 @@ export default function App() {
           roomCode={ctx.roomCode}
           room={ctx.room}
           onCloseDay={() => navigate("landing")}
+          onBack={() => navigate("landing")}
         />
       );
 
@@ -49,11 +51,18 @@ export default function App() {
       return (
         <ClientCheckinScreen
           onJoined={(ticket, room) => navigate("live-ticket", { ticket, room })}
+          onBack={() => navigate("landing")}
         />
       );
 
     case "live-ticket":
-      return <LiveTicketScreen ticket={ctx.ticket} room={ctx.room} />;
+      return (
+        <LiveTicketScreen
+          ticket={ctx.ticket}
+          room={ctx.room}
+          onBack={() => navigate("landing")}
+        />
+      );
 
     default:
       return <LandingScreen onNavigate={(target) => navigate(target)} />;

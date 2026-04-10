@@ -13,7 +13,7 @@ const PRIORITY_OPTIONS = [
 const getPriorityColor = (p) =>
   p === 3 ? "#F87171" : p === 2 ? "#FCD34D" : "#6EE7B7";
 
-const QueueManagementScreen = ({ roomCode, room, onCloseDay }) => {
+const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
   const [queue, setQueue] = useState([]);
   const [servedCount, setServedCount] = useState(0);
   const [manualModal, setManualModal] = useState(false);
@@ -111,6 +111,20 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay }) => {
           <div style={{ fontSize: "14px", color: "var(--text-muted)" }}>{room.name}</div>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <button
+            className="btn"
+            onClick={onBack}
+            style={{
+              background: "transparent",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border)",
+              padding: "7px 14px",
+              borderRadius: "8px",
+              fontSize: "13px",
+            }}
+          >
+            ← Voltar
+          </button>
           <div className="card" style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px" }}>
             <span
               style={{

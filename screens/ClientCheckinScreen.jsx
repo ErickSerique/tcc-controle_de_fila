@@ -7,7 +7,7 @@ import { useState, useRef, useEffect } from "react";
  * Step 2: Enter name + select service category
  * Step 3: Join queue → receive ticket + signed JWT
  */
-const ClientCheckinScreen = ({ onJoined }) => {
+const ClientCheckinScreen = ({ onJoined, onBack }) => {
   const [step, setStep] = useState(1);
   const [code, setCode] = useState("");
   const [room, setRoom] = useState(null);
@@ -109,7 +109,25 @@ const ClientCheckinScreen = ({ onJoined }) => {
     >
       <div className="animate-fade">
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "36px" }}>
+        <div style={{ textAlign: "center", marginBottom: "36px", position: "relative" }}>
+          <button
+            className="btn"
+            onClick={onBack}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: "50%",
+              transform: "translateY(-50%)",
+              background: "transparent",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border)",
+              padding: "7px 14px",
+              borderRadius: "8px",
+              fontSize: "13px",
+            }}
+          >
+            ← Voltar
+          </button>
           <div style={{ fontSize: "26px", fontWeight: 800, marginBottom: "6px" }}>
             fila<span style={{ color: "var(--accent)" }}>.io</span>
           </div>

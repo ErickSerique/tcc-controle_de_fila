@@ -8,7 +8,7 @@ const PRIORITY_OPTIONS = [
 
 const getPriority = (p) => PRIORITY_OPTIONS.find((o) => o.value === p) || PRIORITY_OPTIONS[2];
 
-const HostSetupScreen = ({ onRoomCreated }) => {
+const HostSetupScreen = ({ onRoomCreated, onBack }) => {
   const [roomName, setRoomName] = useState("");
   const [categories, setCategories] = useState([
     { name: "Emergência", priority: 3, tma: 3 },
@@ -67,20 +67,39 @@ const HostSetupScreen = ({ onRoomCreated }) => {
       <div className="animate-fade">
         {/* Header */}
         <div style={{ paddingTop: "16px", marginBottom: "32px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-            <span style={{ fontSize: "20px", fontWeight: 800 }}>
-              fila<span style={{ color: "var(--accent)" }}>.io</span>
-            </span>
-            <span
-              className="tag"
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "20px", fontWeight: 800 }}>
+                fila<span style={{ color: "var(--accent)" }}>.io</span>
+              </span>
+              <span
+                className="tag"
+                style={{
+                  background: "var(--accent-glow)",
+                  color: "var(--accent)",
+                  border: "1px solid var(--accent-dim)",
+                }}
+              >
+                HOST
+              </span>
+            </div>
+            <button
+              className="btn"
+              onClick={onBack}
               style={{
-                background: "var(--accent-glow)",
-                color: "var(--accent)",
-                border: "1px solid var(--accent-dim)",
+                background: "transparent",
+                color: "var(--text-muted)",
+                border: "1px solid var(--border)",
+                padding: "7px 14px",
+                borderRadius: "8px",
+                fontSize: "13px",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
               }}
             >
-              HOST
-            </span>
+              ← Voltar
+            </button>
           </div>
           <h1 style={{ fontSize: "26px", fontWeight: 800, letterSpacing: "-0.02em" }}>
             Configurar Sala
