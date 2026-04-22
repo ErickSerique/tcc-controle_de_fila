@@ -55,8 +55,8 @@ const LiveTicketScreen = ({ ticket: initialTicket, room }) => {
 
   // ── Helpers ─────────────────────────────────────────────────
   const formatWait = (mins) => {
-    if (!mins || mins === 0) return "Agora!";
-    if (mins < 60) return `~${mins} min`;
+    if (!mins || mins === 0) return "Agora mesmo!";
+    if (mins < 60) return `~${mins} minutos`;
     const h = Math.floor(mins / 60);
     const m = mins % 60;
     return `~${h}h${m > 0 ? ` ${m}min` : ""}`;
@@ -68,59 +68,51 @@ const LiveTicketScreen = ({ ticket: initialTicket, room }) => {
   if (isCalled) {
     return (
       <div
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "24px",
-          position: "relative",
-          overflow: "hidden",
-        }}
+        className="screen-container screen-container-centered"
+        role="alert"
+        aria-live="assertive"
+        style={{ position: "relative", overflow: "hidden" }}
       >
         <div
           style={{
             position: "absolute",
             inset: 0,
-            background: "radial-gradient(ellipse 100% 100% at 50% 50%, rgba(110,231,183,0.25) 0%, transparent 65%)",
+            background: "radial-gradient(ellipse 100% 100% at 50% 50%, rgba(16, 185, 129, 0.25) 0%, transparent 65%)",
           }}
+          aria-hidden="true"
         />
-        <div className={`animate-fade ${shaking ? "animate-shake" : ""}`} style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
-          <div className="animate-float" style={{ fontSize: "80px", marginBottom: "20px" }}>🔔</div>
+        <div className={`animate-fade ${shaking ? "animate-shake" : ""} container-sm text-center`} style={{ position: "relative", zIndex: 1 }}>
+          <div className="animate-float" style={{ fontSize: "80px", marginBottom: "var(--space-md)" }} aria-hidden="true">🔔</div>
           <h1
-            className="animate-glow"
+            className="animate-glow text-success"
             style={{
-              fontSize: "40px",
-              fontWeight: 800,
-              color: "var(--accent)",
-              letterSpacing: "-0.02em",
-              marginBottom: "10px",
+              fontSize: "var(--text-4xl)",
+              marginBottom: "var(--space-sm)",
             }}
           >
-            É SUA VEZ!
+            É A SUA VEZ!
           </h1>
-          <p style={{ fontSize: "18px", color: "var(--text)", marginBottom: "6px" }}>
-            Dirija-se ao guichê agora
+          <p style={{ fontSize: "var(--text-xl)", color: "var(--text)", marginBottom: "var(--space-xs)" }}>
+            Por favor, dirija-se ao guichê de atendimento agora.
           </p>
-          <p className="mono" style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-            {room.name}
+          <p className="text-muted" style={{ fontSize: "var(--text-lg)" }}>
+            Sala: {room.name}
           </p>
+          
           <div
             className="card"
             style={{
-              marginTop: "32px",
-              padding: "16px 32px",
+              marginTop: "var(--space-2xl)",
+              padding: "var(--space-xl) var(--space-2xl)",
               display: "inline-block",
-              borderColor: "var(--accent-dim)",
-              background: "var(--accent-glow)",
+              borderColor: "var(--success)",
+              background: "rgba(16, 185, 129, 0.1)",
             }}
           >
-            <div className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>SENHA</div>
+            <div className="text-muted label" style={{ marginBottom: "var(--space-xs)" }}>SUA SENHA</div>
             <div
-              className="mono"
-              style={{ fontSize: "36px", fontWeight: 700, color: "var(--accent)", letterSpacing: "0.1em" }}
+              className="mono text-success"
+              style={{ fontSize: "var(--text-5xl)", fontWeight: 800, letterSpacing: "0.1em" }}
             >
               #{ticketCode}
             </div>
@@ -133,17 +125,8 @@ const LiveTicketScreen = ({ ticket: initialTicket, room }) => {
   // ── Waiting state ────────────────────────────────────────────
   return (
     <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--bg)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        position: "relative",
-        overflow: "hidden",
-      }}
+      className="screen-container screen-container-centered"
+      style={{ position: "relative", overflow: "hidden" }}
     >
       {/* Glow when next */}
       {isNext && (
@@ -154,48 +137,40 @@ const LiveTicketScreen = ({ ticket: initialTicket, room }) => {
             background: "radial-gradient(ellipse 80% 60% at 50% 50%, var(--accent-glow) 0%, transparent 60%)",
             transition: "opacity 1s",
           }}
+          aria-hidden="true"
         />
       )}
 
       <div
-        className={`animate-fade ${shaking ? "animate-shake" : ""}`}
-        style={{
-          position: "relative",
-          zIndex: 1,
-          width: "100%",
-          maxWidth: "360px",
-          textAlign: "center",
-        }}
+        className={`animate-fade ${shaking ? "animate-shake" : ""} container-sm text-center`}
+        style={{ position: "relative", zIndex: 1 }}
+        aria-live="polite"
       >
         {/* Room info */}
         <p
-          className="mono"
+          className="text-muted"
           style={{
-            fontSize: "11px",
-            color: "var(--text-muted)",
-            letterSpacing: "0.12em",
+            fontSize: "var(--text-sm)",
+            letterSpacing: "0.05em",
             textTransform: "uppercase",
-            marginBottom: "32px",
+            marginBottom: "var(--space-2xl)",
+            fontWeight: 600
           }}
         >
-          fila.io · {room.name}
+          fila.io — Sala: {room.name}
         </p>
 
         {/* Ticket number */}
-        <div style={{ marginBottom: "28px" }}>
-          <div
-            className="mono"
-            style={{ fontSize: "11px", color: "var(--text-muted)", letterSpacing: "0.1em", marginBottom: "8px" }}
-          >
-            SENHA
+        <div style={{ marginBottom: "var(--space-2xl)" }}>
+          <div className="label text-center" style={{ letterSpacing: "0.1em", marginBottom: "var(--space-sm)" }}>
+            SUA SENHA
           </div>
           <div
-            className={`mono ${isNext ? "animate-glow" : ""}`}
+            className={`mono ${isNext ? "animate-glow text-accent" : "text-text"}`}
             style={{
-              fontSize: "64px",
+              fontSize: "var(--text-5xl)",
               fontWeight: 800,
               letterSpacing: "0.05em",
-              color: isNext ? "var(--accent)" : "var(--text)",
               transition: "color 0.5s, text-shadow 0.5s",
             }}
           >
@@ -205,97 +180,85 @@ const LiveTicketScreen = ({ ticket: initialTicket, room }) => {
 
         {/* Position card */}
         <div
-          className={`card ${isNext ? "animate-next" : ""}`}
+          className="card"
           style={{
-            padding: "28px 24px",
-            marginBottom: "16px",
-            border: `1px solid ${isNext ? "var(--accent)" : "var(--border)"}`,
-            transition: "border-color 0.5s",
+            padding: "var(--space-xl)",
+            marginBottom: "var(--space-lg)",
+            border: `2px solid ${isNext ? "var(--accent)" : "var(--border)"}`,
+            background: isNext ? "var(--accent-glow)" : "var(--surface)",
+            transition: "border-color 0.5s, background-color 0.5s",
           }}
         >
-          <div
-            className="mono"
-            style={{
-              fontSize: "12px",
-              color: "var(--text-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              marginBottom: "10px",
-            }}
-          >
-            Posição na Fila
+          <div className="label text-center" style={{ textTransform: "uppercase", marginBottom: "var(--space-md)" }}>
+            Sua Posição na Fila
           </div>
           <div
-            className={`mono ${isNext ? "animate-glow" : ""}`}
+            className={`mono ${isNext ? "animate-glow text-accent" : "text-text"}`}
             style={{
               fontSize: "80px",
               fontWeight: 800,
               lineHeight: 1,
-              color: isNext ? "var(--accent)" : "var(--text)",
               transition: "color 0.5s",
             }}
+            aria-label={`Você é o número ${ticket.position} da fila`}
           >
             {ticket.position}º
           </div>
+          
           {isNext && (
             <div
+              className="text-accent"
+              role="status"
               style={{
-                marginTop: "12px",
-                color: "var(--accent)",
-                fontSize: "14px",
+                marginTop: "var(--space-md)",
+                fontSize: "var(--text-lg)",
                 fontWeight: 700,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "6px",
+                gap: "var(--space-sm)",
               }}
             >
               <span
                 style={{
-                  width: 8,
-                  height: 8,
+                  width: "12px",
+                  height: "12px",
                   borderRadius: "50%",
                   background: "var(--accent)",
                   animation: "ringPulse 1.5s ease-in-out infinite",
                   display: "inline-block",
                 }}
+                aria-hidden="true"
               />
-              Você é o próximo!
+              Você é o próximo! Fique atento.
             </div>
           )}
         </div>
 
         {/* Wait + Category stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "28px" }}>
-          <div className="card" style={{ padding: "16px", textAlign: "center" }}>
-            <div className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Espera Est.
-            </div>
-            <div
-              className="mono"
-              style={{ fontSize: "20px", fontWeight: 700, color: "var(--warn)" }}
-            >
+        <div className="grid responsive-grid-4 gap-md" style={{ marginBottom: "var(--space-2xl)" }}>
+          <div className="card stat-card" style={{ gridColumn: "span 1" }}>
+            <div className="stat-card-label">Tempo Estimado de Espera</div>
+            <div className="stat-card-value text-warn" style={{ fontSize: "var(--text-xl)" }}>
               {formatWait(ticket.estimatedWait)}
             </div>
           </div>
-          <div className="card" style={{ padding: "16px", textAlign: "center" }}>
-            <div className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Serviço
-            </div>
-            <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--purple)" }}>
+          <div className="card stat-card" style={{ gridColumn: "span 1" }}>
+            <div className="stat-card-label">Serviço Selecionado</div>
+            <div className="stat-card-value text-purple" style={{ fontSize: "var(--text-lg)", fontWeight: 700 }}>
               {ticket.category}
             </div>
           </div>
         </div>
 
-        <p
-          className="mono"
-          style={{ color: "var(--text-dim)", fontSize: "11px", lineHeight: 1.6 }}
-        >
-          Não feche esta tela
-          <br />
-          Você será notificado aqui
-        </p>
+        <div className="alert alert-info justify-center">
+          <span aria-hidden="true">ℹ️</span> 
+          <span>
+            <strong>Por favor, não feche esta tela.</strong>
+            <br />
+            Você será notificado aqui quando for a sua vez.
+          </span>
+        </div>
       </div>
     </div>
   );

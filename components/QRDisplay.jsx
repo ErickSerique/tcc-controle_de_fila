@@ -38,12 +38,15 @@ const QRDisplay = ({ code, size = 120 }) => {
 
   return (
     <div
+      role="img"
+      aria-label={`Código QR para entrar na sala ${code}`}
       style={{
         background: "#fff",
-        padding: "10px",
-        borderRadius: "12px",
+        padding: "var(--space-md)",
+        borderRadius: "var(--radius-lg)",
         display: "inline-block",
         lineHeight: 0,
+        border: "1px solid var(--border)"
       }}
     >
       <svg

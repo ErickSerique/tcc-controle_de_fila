@@ -30,14 +30,13 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 220, height: 220 } },
         (decodedText) => {
-          // Expected format: https://fila.io/join/ROOMCODE or just ROOMCODE
           const match = decodedText.match(/([A-Z0-9]{6})$/i);
           if (match) {
             setCode(match[1].toUpperCase());
             stopScanner();
           }
         },
-        () => {} // ignore decode errors
+        () => {} 
       );
     } catch {
       setError("Câmera indisponível. Use o código manual.");
@@ -74,7 +73,7 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
 
   // ── Join queue ────────────────────────────────────────────
   const joinQueue = async () => {
-    if (!name.trim()) { setError("Informe seu nome."); return; }
+    if (!name.trim()) { setError("Informe seu nome completo."); return; }
     setError("");
     setJoining(true);
     try {
@@ -85,7 +84,7 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao entrar na fila.");
-      // Store JWT in sessionStorage (not localStorage) — cleared on tab close
+      
       sessionStorage.setItem("session_token", data.sessionToken);
       onJoined(data.ticket, room);
     } catch (err) {
@@ -95,123 +94,73 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--bg)",
-        padding: "24px",
-        maxWidth: "480px",
-        margin: "0 auto",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-      }}
-    >
-      <div className="animate-fade">
+    <div className="screen-container screen-container-centered">
+      <div className="container-sm flex-col gap-lg animate-fade">
+        
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "36px", position: "relative" }}>
+        <div className="text-center" style={{ position: "relative" }}>
           <button
-            className="btn"
+            className="btn btn-ghost"
             onClick={onBack}
-            style={{
-              position: "absolute",
-              left: 0,
-              top: "50%",
-              transform: "translateY(-50%)",
-              background: "transparent",
-              color: "var(--text-muted)",
-              border: "1px solid var(--border)",
-              padding: "7px 14px",
-              borderRadius: "8px",
-              fontSize: "13px",
-            }}
+            style={{ position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)", padding: "var(--space-xs) var(--space-sm)" }}
+            aria-label="Voltar"
           >
-            ← Voltar
+            <span aria-hidden="true">←</span> Voltar
           </button>
-          <div style={{ fontSize: "26px", fontWeight: 800, marginBottom: "6px" }}>
-            fila<span style={{ color: "var(--accent)" }}>.io</span>
+          <div style={{ fontSize: "var(--text-3xl)", fontWeight: 800, marginBottom: "var(--space-xs)" }}>
+            fila<span className="text-accent">.io</span>
           </div>
-          <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+          <p className="text-muted" style={{ fontSize: "var(--text-sm)", margin: 0 }}>
             {step === 1 ? "Escaneie o QR ou digite o código da sala" : "Quase lá — preencha seus dados"}
           </p>
+          <div className="text-dim mono" style={{ fontSize: "var(--text-xs)", marginTop: "var(--space-sm)" }}>
+            Passo {step} de 2
+          </div>
         </div>
 
         {/* ── STEP 1: Room code input ── */}
         {step === 1 && (
-          <>
+          <div className="flex-col gap-md">
             {/* QR Scanner area */}
             {scanning ? (
-              <div style={{ marginBottom: "20px" }}>
+              <div className="flex-col gap-sm">
                 <div
                   id="qr-reader"
                   ref={qrRef}
-                  style={{ borderRadius: "12px", overflow: "hidden", border: "2px solid var(--accent)" }}
+                  style={{ borderRadius: "var(--radius-lg)", overflow: "hidden", border: "2px solid var(--accent)" }}
                 />
-                <button
-                  className="btn"
-                  onClick={stopScanner}
-                  style={{
-                    marginTop: "12px",
-                    width: "100%",
-                    padding: "12px",
-                    background: "transparent",
-                    color: "var(--danger)",
-                    border: "1px solid rgba(248,113,113,0.3)",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                  }}
-                >
-                  Cancelar Leitura
+                <button className="btn btn-danger" onClick={stopScanner} style={{ width: "100%" }}>
+                  Cancelar Leitura da Câmera
                 </button>
               </div>
             ) : (
               <button
-                className="btn card"
+                className="card card-interactive text-center"
                 onClick={startScanner}
-                style={{
-                  width: "100%",
-                  padding: "22px",
-                  marginBottom: "20px",
-                  border: "1px dashed var(--border)",
-                  textAlign: "center",
-                  cursor: "pointer",
-                  transition: "all 0.3s",
-                  background: "transparent",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+                style={{ width: "100%", padding: "var(--space-2xl)", borderStyle: "dashed", background: "transparent" }}
               >
-                <div style={{ fontSize: "34px", marginBottom: "8px" }}>📷</div>
-                <div style={{ fontWeight: 600 }}>Escanear QR Code</div>
-                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
-                  Aponte a câmera para o QR Code da sala
+                <div style={{ fontSize: "var(--text-4xl)", marginBottom: "var(--space-sm)" }} aria-hidden="true">📷</div>
+                <div style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>Escanear QR Code da Sala</div>
+                <div className="text-muted" style={{ fontSize: "var(--text-sm)", marginTop: "var(--space-xs)" }}>
+                  Aponte a câmera para ler automaticamente
                 </div>
               </button>
             )}
 
             {/* Divider */}
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+            <div className="flex-row gap-md justify-center" style={{ margin: "var(--space-md) 0" }}>
               <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-              <span className="mono" style={{ color: "var(--text-muted)", fontSize: "12px" }}>OU</span>
+              <span className="mono text-muted" style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>OU DIGITE MANUALMENTE</span>
               <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
             </div>
 
             {/* Manual code input */}
-            <div style={{ marginBottom: "16px" }}>
-              <label
-                className="mono"
-                style={{
-                  display: "block",
-                  fontSize: "11px",
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: "8px",
-                }}
-              >
-                Código da Sala (6 dígitos)
+            <div>
+              <label htmlFor="room-code" className="label text-center">
+                Código da Sala (6 letras ou números)
               </label>
               <input
+                id="room-code"
                 className="input mono"
                 placeholder="ABC123"
                 maxLength={6}
@@ -219,91 +168,73 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
                 onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && code.length === 6 && validateRoom()}
                 style={{
-                  fontSize: "28px",
+                  fontSize: "var(--text-3xl)",
                   letterSpacing: "0.25em",
                   textAlign: "center",
                   textTransform: "uppercase",
+                  height: "80px"
                 }}
               />
             </div>
 
             {error && (
-              <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "12px", textAlign: "center" }}>
-                ⚠️ {error}
+              <div className="alert alert-danger justify-center" role="alert">
+                <span aria-hidden="true">⚠️</span> {error}
               </div>
             )}
 
             <button
-              className="btn"
+              className="btn btn-primary"
               onClick={validateRoom}
               disabled={code.length < 6 || validating}
-              style={{
-                width: "100%",
-                padding: "16px",
-                background:
-                  code.length >= 6 && !validating
-                    ? "linear-gradient(135deg, var(--accent), #34d399)"
-                    : "#1e293b",
-                color: code.length >= 6 && !validating ? "#022c22" : "var(--text-dim)",
-                borderRadius: "12px",
-                fontSize: "15px",
-                fontWeight: 700,
-                transition: "all 0.3s",
-              }}
+              style={{ width: "100%", minHeight: "60px", fontSize: "var(--text-xl)" }}
             >
-              {validating ? "Verificando..." : "Validar Sala →"}
+              {validating ? "Verificando Sala..." : "Validar Código da Sala →"}
             </button>
-          </>
+          </div>
         )}
 
         {/* ── STEP 2: Name + Category ── */}
         {step === 2 && room && (
-          <div className="animate-fade">
+          <div className="animate-fade flex-col gap-lg">
             {/* Room confirmed banner */}
-            <div
-              className="card"
-              style={{
-                padding: "18px",
-                marginBottom: "22px",
-                borderColor: "var(--accent-dim)",
-                background: "var(--accent-glow)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div
-                  style={{
-                    width: 40,
-                    height: 40,
-                    background: "var(--accent)",
-                    borderRadius: "10px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "20px",
-                    flexShrink: 0,
-                  }}
-                >
-                  ✓
+            <div className="card flex-row gap-md" style={{ background: "var(--accent-glow)", borderColor: "var(--accent-dim)" }}>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  background: "var(--accent)",
+                  borderRadius: "var(--radius-md)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "24px",
+                  color: "white",
+                  flexShrink: 0,
+                }}
+                aria-hidden="true"
+              >
+                ✓
+              </div>
+              <div>
+                <div className="text-accent" style={{ fontWeight: 700, fontSize: "var(--text-lg)" }}>
+                  {room.name}
                 </div>
-                <div>
-                  <div style={{ fontWeight: 700, color: "var(--accent)", fontSize: "15px" }}>
-                    {room.name}
-                  </div>
-                  <div className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
-                    {room.code} · {room.queueLength} na fila agora
-                  </div>
+                <div className="mono text-muted" style={{ fontSize: "var(--text-sm)", marginTop: "var(--space-xs)" }}>
+                  Código: {room.code} · {room.queueLength} pessoas na fila
                 </div>
               </div>
             </div>
 
             {/* Name field */}
-            <div style={{ marginBottom: "18px" }}>
-              <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                Seu Nome
+            <div>
+              <label htmlFor="client-name" className="label">
+                Seu Nome Completo
               </label>
               <input
+                id="client-name"
                 className="input"
-                placeholder="Nome completo"
+                placeholder="Ex: João da Silva"
                 value={name}
                 onChange={(e) => { setName(e.target.value); setError(""); }}
                 autoFocus
@@ -311,67 +242,80 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
             </div>
 
             {/* Category selector */}
-            <div style={{ marginBottom: "24px" }}>
-              <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                Tipo de Atendimento
+            <div>
+              <label className="label">
+                Por que você está aqui hoje? (Selecione o serviço)
               </label>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div className="flex-col gap-sm">
                 {room.categories.map((cat) => {
                   const selected = selectedCat === cat.name;
-                  const pColor =
-                    cat.priority === 3 ? "var(--danger)" : cat.priority === 2 ? "var(--warn)" : "var(--accent)";
-                  const pLabel =
-                    cat.priority === 3 ? "Alta" : cat.priority === 2 ? "Média" : "Baixa";
+                  const isHighPriority = cat.priority === 3;
+                  const isMedPriority = cat.priority === 2;
+                  
+                  let badgeBg = "rgba(16, 185, 129, 0.1)";
+                  let badgeColor = "var(--success)";
+                  let pLabel = "Prioridade Comum";
+                  
+                  if (isHighPriority) {
+                    badgeBg = "rgba(239, 68, 68, 0.1)";
+                    badgeColor = "var(--danger)";
+                    pLabel = "Prioridade Alta";
+                  } else if (isMedPriority) {
+                    badgeBg = "rgba(245, 158, 11, 0.1)";
+                    badgeColor = "var(--warn)";
+                    pLabel = "Prioridade Média";
+                  }
+
                   return (
                     <button
                       key={cat.name}
-                      className="btn card"
+                      className="card card-interactive flex-row gap-md"
                       onClick={() => setSelectedCat(cat.name)}
+                      aria-pressed={selected}
                       style={{
-                        padding: "14px 16px",
                         textAlign: "left",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
+                        padding: "var(--space-md) var(--space-lg)",
+                        border: `2px solid ${selected ? "var(--accent)" : "var(--border)"}`,
                         background: selected ? "var(--accent-glow)" : "var(--surface)",
-                        cursor: "pointer",
-                        transition: "all 0.2s",
                       }}
                     >
                       <div
                         style={{
-                          width: 10,
-                          height: 10,
+                          width: "20px",
+                          height: "20px",
                           borderRadius: "50%",
-                          background: selected ? "var(--accent)" : "var(--border)",
+                          border: `2px solid ${selected ? "var(--accent)" : "var(--text-dim)"}`,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
                           flexShrink: 0,
-                          transition: "background 0.2s",
+                          background: selected ? "var(--accent)" : "transparent"
                         }}
-                      />
+                        aria-hidden="true"
+                      >
+                         {selected && <span style={{ color: "white", fontSize: "12px", lineHeight: 1 }}>✓</span>}
+                      </div>
+                      
                       <span
                         style={{
                           flex: 1,
-                          fontWeight: 600,
+                          fontWeight: 700,
                           color: selected ? "var(--accent)" : "var(--text)",
-                          fontSize: "14px",
+                          fontSize: "var(--text-lg)",
                         }}
                       >
                         {cat.name}
                       </span>
-                      <span className="mono" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                        ~{cat.tma}min
+                      
+                      <span className="mono text-muted" style={{ fontSize: "var(--text-sm)" }}>
+                        Tempo Médio: ~{cat.tma} min
                       </span>
-                      <span
-                        className="tag"
-                        style={{
-                          background:
-                            cat.priority === 3 ? "#7f1d1d44" : cat.priority === 2 ? "#78350f44" : "#14532d44",
-                          color: pColor,
-                        }}
-                      >
-                        {pLabel}
-                      </span>
+                      
+                      {isHighPriority && (
+                         <span className="tag" style={{ background: badgeBg, color: badgeColor }}>
+                            {pLabel}
+                         </span>
+                      )}
                     </button>
                   );
                 })}
@@ -379,45 +323,27 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
             </div>
 
             {error && (
-              <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "12px", textAlign: "center" }}>
-                ⚠️ {error}
+              <div className="alert alert-danger justify-center" role="alert">
+                <span aria-hidden="true">⚠️</span> {error}
               </div>
             )}
 
-            <div style={{ display: "flex", gap: "10px" }}>
+            <div className="flex-row gap-md">
               <button
-                className="btn"
+                className="btn btn-secondary"
                 onClick={() => { setStep(1); setError(""); }}
-                style={{
-                  padding: "16px",
-                  background: "var(--surface)",
-                  color: "var(--text-muted)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "12px",
-                  fontSize: "14px",
-                  flexShrink: 0,
-                }}
+                aria-label="Voltar para o passo anterior"
+                style={{ padding: "0 var(--space-xl)" }}
               >
-                ←
+                <span aria-hidden="true">←</span> Voltar
               </button>
               <button
-                className="btn"
+                className="btn btn-primary"
                 onClick={joinQueue}
                 disabled={joining}
-                style={{
-                  flex: 1,
-                  padding: "16px",
-                  background: joining
-                    ? "var(--accent-dim)"
-                    : "linear-gradient(135deg, var(--accent), #34d399)",
-                  color: "#022c22",
-                  borderRadius: "12px",
-                  fontSize: "15px",
-                  fontWeight: 800,
-                  boxShadow: joining ? "none" : "0 8px 24px var(--accent-glow)",
-                }}
+                style={{ flex: 1, minHeight: "64px", fontSize: "var(--text-xl)" }}
               >
-                {joining ? "⚡ Entrando na fila..." : "🎟️ Pegar Minha Senha"}
+                {joining ? "Gerando Senha..." : "🎟️ Confirmar e Pegar Minha Senha"}
               </button>
             </div>
           </div>

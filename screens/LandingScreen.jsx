@@ -1,16 +1,12 @@
 import { useState } from "react";
 
 const LandingScreen = ({ onNavigate }) => {
-  const [hovered, setHovered] = useState(null);
-
   const cards = [
     {
       role: "host",
       icon: "🏠",
       title: "Sou Host",
       sub: "Criar e gerenciar sala de atendimento",
-      color: "#6EE7B7",
-      shadow: "rgba(110,231,183,0.18)",
       target: "host-setup",
     },
     {
@@ -18,93 +14,54 @@ const LandingScreen = ({ onNavigate }) => {
       icon: "🎟️",
       title: "Sou Cliente",
       sub: "Entrar em uma fila de espera",
-      color: "#A78BFA",
-      shadow: "rgba(167,139,250,0.18)",
       target: "client-checkin",
     },
   ];
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--bg)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      {/* Background grid */}
+    <div className="screen-container screen-container-centered" style={{ position: "relative", overflow: "hidden" }}>
+      {/* Radial glow background */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          backgroundImage:
-            "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
-          opacity: 0.3,
+          background: "radial-gradient(ellipse 80% 60% at 50% 50%, var(--accent-glow) 0%, transparent 70%)",
         }}
-      />
-      {/* Radial glow */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% 50%, var(--accent-glow) 0%, transparent 70%)",
-        }}
+        aria-hidden="true"
       />
 
       <div
-        className="animate-fade"
-        style={{
-          position: "relative",
-          zIndex: 1,
-          textAlign: "center",
-          width: "100%",
-          maxWidth: "460px",
-        }}
+        className="animate-fade flex-col gap-lg container-sm"
+        style={{ position: "relative", zIndex: 1, textAlign: "center" }}
       >
         {/* Logo */}
-        <div style={{ marginBottom: "52px" }}>
-          <div
-            className="animate-float"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "12px",
-              marginBottom: "14px",
-            }}
-          >
+        <div style={{ marginBottom: "var(--space-2xl)" }}>
+          <div className="animate-float flex-row justify-center gap-md" style={{ marginBottom: "var(--space-md)" }}>
             <div
               style={{
-                width: 44,
-                height: 44,
+                width: "56px",
+                height: "56px",
                 background: "linear-gradient(135deg, var(--accent), var(--purple))",
-                borderRadius: "12px",
+                borderRadius: "var(--radius-md)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "22px",
+                fontSize: "32px",
               }}
+              aria-hidden="true"
             >
               ⚡
             </div>
-            <span style={{ fontSize: "30px", fontWeight: 800, letterSpacing: "-0.03em" }}>
-              fila<span style={{ color: "var(--accent)" }}>.io</span>
+            <span style={{ fontSize: "var(--text-4xl)", fontWeight: 800, letterSpacing: "-0.03em" }}>
+              fila<span className="text-accent">.io</span>
             </span>
           </div>
           <p
+            className="mono text-muted"
             style={{
-              color: "var(--text-muted)",
-              fontSize: "13px",
+              fontSize: "var(--text-sm)",
               letterSpacing: "0.12em",
               textTransform: "uppercase",
-              fontFamily: "JetBrains Mono",
             }}
           >
             Gestão de Filas em Tempo Real
@@ -112,75 +69,50 @@ const LandingScreen = ({ onNavigate }) => {
         </div>
 
         {/* Role cards */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div className="flex-col gap-md">
           {cards.map((c) => (
             <button
               key={c.role}
-              className="btn card"
-              onMouseEnter={() => setHovered(c.role)}
-              onMouseLeave={() => setHovered(null)}
+              className="card card-interactive flex-row"
               onClick={() => onNavigate(c.target)}
+              aria-label={`${c.title} - ${c.sub}`}
               style={{
-                padding: "26px 22px",
                 textAlign: "left",
-                display: "flex",
-                alignItems: "center",
-                gap: "20px",
-                border: `1px solid ${hovered === c.role ? c.color + "55" : "var(--border)"}`,
-                transition: "all 0.3s ease",
-                transform: hovered === c.role ? "translateY(-3px)" : "none",
-                boxShadow: hovered === c.role ? `0 20px 60px ${c.shadow}` : "none",
-                cursor: "pointer",
+                gap: "var(--space-xl)",
                 width: "100%",
-                background: hovered === c.role ? `${c.color}08` : "var(--surface)",
+                padding: "var(--space-xl)",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
               }}
             >
               <div
                 style={{
-                  width: 58,
-                  height: 58,
-                  background: `${c.color}15`,
-                  borderRadius: "14px",
+                  width: "64px",
+                  height: "64px",
+                  background: "var(--accent-light)",
+                  borderRadius: "var(--radius-lg)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: "28px",
+                  fontSize: "32px",
                   flexShrink: 0,
-                  transition: "transform 0.3s",
-                  transform: hovered === c.role ? "scale(1.08)" : "scale(1)",
                 }}
+                aria-hidden="true"
               >
                 {c.icon}
               </div>
               <div style={{ flex: 1 }}>
-                <div
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: 700,
-                    color: hovered === c.role ? c.color : "var(--text)",
-                    transition: "color 0.2s",
-                  }}
-                >
+                <div style={{ fontSize: "var(--text-xl)", fontWeight: 700, color: "var(--text)" }}>
                   {c.title}
                 </div>
-                <div
-                  style={{
-                    fontSize: "13px",
-                    color: "var(--text-muted)",
-                    marginTop: "3px",
-                  }}
-                >
+                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", marginTop: "var(--space-xs)" }}>
                   {c.sub}
                 </div>
               </div>
               <div
-                style={{
-                  color: c.color,
-                  fontSize: "22px",
-                  opacity: hovered === c.role ? 1 : 0.25,
-                  transition: "all 0.2s",
-                  transform: hovered === c.role ? "translateX(4px)" : "none",
-                }}
+                className="text-accent"
+                style={{ fontSize: "var(--text-2xl)", opacity: 0.5 }}
+                aria-hidden="true"
               >
                 →
               </div>
@@ -189,11 +121,10 @@ const LandingScreen = ({ onNavigate }) => {
         </div>
 
         <p
-          className="mono"
+          className="mono text-dim"
           style={{
-            marginTop: "36px",
-            color: "var(--text-dim)",
-            fontSize: "11px",
+            marginTop: "var(--space-2xl)",
+            fontSize: "var(--text-xs)",
             letterSpacing: "0.08em",
           }}
         >

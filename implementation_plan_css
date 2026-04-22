@@ -1,0 +1,175 @@
+# UI/UX Modernization — fila.io Queue Management System
+
+A comprehensive refactor of all frontend styles and components to achieve a modern, accessible, and highly usable interface — with special focus on elderly users and low digital literacy.
+
+## Current State Analysis
+
+The existing UI has a reasonable design-token foundation in `globals.css`, but several issues:
+
+1. **Accessibility gaps**: Font sizes too small (`11px`, `12px`, `13px` throughout), low contrast in muted text, small touch targets, relies on color-only indicators for priority
+2. **Inline styles everywhere**: Every screen uses hundreds of lines of inline `style={{}}` objects — hard to maintain, no hover/focus states possible via CSS
+3. **Inconsistent patterns**: Buttons, cards, and labels are restyled inline on every screen
+4. **Responsive gaps**: No breakpoints, grid layouts break on mobile (`gridTemplateColumns: "repeat(4, 1fr)"` on phones)
+5. **Missing focus/keyboard states**: Only `:hover` exists for `.btn`, no `:focus-visible` ring
+6. **Labels**: Monospace uppercase micro-labels are cryptic; "TMA", "SENHA" need friendlier language
+
+---
+
+## Proposed Changes
+
+### 1. Design System — `globals.css` Full Refactor
+
+#### [MODIFY] [globals.css](file:///c:/Users/gokum/OneDrive/%C3%81rea%20de%20Trabalho/TCC/tcc-controle_de_fila/styles/globals.css)
+
+**Design Token Improvements:**
+- Add spacing scale tokens (`--space-xs` through `--space-3xl`)
+- Add font-size tokens (`--text-sm`, `--text-base`, `--text-lg`, `--text-xl`, etc.)
+- Add border-radius tokens (`--radius-sm`, `--radius-md`, `--radius-lg`)
+- Add transition tokens for consistent timing
+- Increase base font size from browser default to `18px` for elderly accessibility
+- Improve contrast ratios — `--text-muted` from `#475569`→`#374151` (light) and `#a1a1aa`→`#d4d4d8` (dark)
+
+**Component Class Improvements:**
+- `.btn`: increase min-height to `48px` (WCAG touch target), add `:focus-visible` ring, improve padding
+- `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.btn-ghost`: standardized button variants
+- `.input`: increase to `min-height: 52px`, font-size `1rem`, visible label association
+- `.card`: refine hover behavior (not all cards should lift on hover)
+- `.card-interactive`: separate class for clickable cards
+- Add `.label` class (replaces mono uppercase micro-labels with readable style)
+- Add `.error-banner`, `.success-banner` standardized alert classes
+- Add `.badge` / `.status-dot` for priority indicators with text+icon (not color-only)
+- Add `.screen-container`, `.screen-header` layout utilities
+- Add `.stat-card` for the dashboard stats
+
+**Responsive Breakpoints:**
+```css
+/* Mobile-first breakpoints */
+@media (min-width: 640px)  { /* sm - tablet portrait */ }
+@media (min-width: 768px)  { /* md - tablet landscape */ }
+@media (min-width: 1024px) { /* lg - desktop */ }
+```
+
+**Accessibility Additions:**
+- `prefers-reduced-motion` media query to disable animations
+- Skip-to-content link styles
+- Focus ring on all interactive elements
+- Minimum `44px × 44px` touch targets
+- Allow user scaling (remove `user-scalable=no` from viewport)
+
+---
+
+### 2. HTML Entry — Accessibility Fix
+
+#### [MODIFY] [index.html](file:///c:/Users/gokum/OneDrive/%C3%81rea%20de%20Trabalho/TCC/tcc-controle_de_fila/index.html)
+
+- Remove `maximum-scale=1.0, user-scalable=no` — this blocks pinch-to-zoom which is an accessibility violation
+- Add Google Fonts `<link>` preconnect for faster loading (currently only loaded via CSS `@import`)
+
+---
+
+### 3. Screen Components — Move from Inline Styles to CSS Classes
+
+> [!IMPORTANT]
+> All logic, props, event handlers, and data flow remain UNCHANGED. Only the `style={{}}` objects and `className` strings are modified.
+
+#### [MODIFY] [LandingScreen.jsx](file:///c:/Users/gokum/OneDrive/%C3%81rea%20de%20Trabalho/TCC/tcc-controle_de_fila/screens/LandingScreen.jsx)
+
+- Replace inline styles with new CSS classes from design system
+- Increase role card sizes and text for elderly visibility
+- Add `aria-label` and descriptive text to cards
+- Replace tiny `11px` footer with larger, friendlier text
+- Simplify background effects (remove grid pattern that adds visual noise)
+- Use CSS-based hover states instead of JS `hovered` state management
+- Increase card text: title → `1.25rem`, subtitle → `1rem`
+
+#### [MODIFY] [HostSetupScreen.jsx](file:///c:/Users/gokum/OneDrive/%C3%81rea%20de%20Trabalho/TCC/tcc-controle_de_fila/screens/HostSetupScreen.jsx)
+
+- Replace all inline styles with CSS classes
+- Improve form layout: make the 3-column grid responsive (stack on mobile)
+- Replace cryptic "TMA (min)" label with "Tempo Médio de Atendimento (minutos)"
+- Make category cards larger, easier to read
+- Standardize back button with icon
+- Add form validation visual feedback
+- Use `.label` class instead of tiny monospace uppercase
+
+#### [MODIFY] [ClientCheckinScreen.jsx](file:///c:/Users/gokum/OneDrive/%C3%81rea%20de%20Trabalho/TCC/tcc-controle_de_fila/screens/ClientCheckinScreen.jsx)
+
+- Replace all inline styles with CSS classes
+- Increase QR scan button size (critical action — must be very obvious)
+- Make code input field larger and more prominent
+- Category selection: add checkmark icon, not just color dot
+- Improve step indicator (show step 1/2 clearly)
+- Make "Pegar Minha Senha" button very prominent and large
+
+#### [MODIFY] [LiveTicketScreen.jsx](file:///c:/Users/gokum/OneDrive/%C3%81rea%20de%20Trabalho/TCC/tcc-controle_de_fila/screens/LiveTicketScreen.jsx)
+
+- Replace all inline styles with CSS classes
+- Increase ticket number size for visibility across a room
+- Make "É SUA VEZ!" state extremely prominent (full-screen visual)
+- Add text labels alongside colors for wait time
+- Replace "Espera Est." abbreviation with "Tempo Estimado de Espera"
+- Make "Não feche esta tela" warning more visible
+
+#### [MODIFY] [QueueManagementScreen.jsx](file:///c:/Users/gokum/OneDrive/%C3%81rea%20de%20Trabalho/TCC/tcc-controle_de_fila/screens/QueueManagementScreen.jsx)
+
+- Replace all inline styles with CSS classes
+- Make stats row responsive: 4 columns → 2 columns on mobile
+- Improve queue table: larger rows, clearer priority indicators
+- Make "Chamar Próximo" button unmissably large
+- Improve modal form layout
+- Add confirmation step for "Encerrar Dia"
+- Table becomes card-list on mobile (tables are hard to read on small screens)
+
+---
+
+### 4. Shared Components
+
+#### [MODIFY] [Modal.jsx](file:///c:/Users/gokum/OneDrive/%C3%81rea%20de%20Trabalho/TCC/tcc-controle_de_fila/components/Modal.jsx)
+
+- Add focus trap (tab cycling stays inside modal)
+- Add `aria-labelledby` support
+- Improve backdrop contrast
+- Add close button (×) in corner for discoverability
+
+#### [MODIFY] [QRDisplay.jsx](file:///c:/Users/gokum/OneDrive/%C3%81rea%20de%20Trabalho/TCC/tcc-controle_de_fila/components/QRDisplay.jsx)
+
+- Add `aria-label` describing what the QR code is for
+- Increase default size for visibility
+- Add subtle border for better visibility on white backgrounds
+
+---
+
+## Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| **Base font 18px** | Elderly users need larger text; 16px is minimum, 18px is comfortable |
+| **Min touch target 48px** | WCAG 2.2 requires minimum 44px; 48px adds comfort margin |
+| **Remove `user-scalable=no`** | Blocking zoom is a WCAG Level A violation |
+| **CSS classes over inline styles** | Enables hover/focus/active states, media queries, and maintainability |
+| **Spell out abbreviations** | "TMA" → "Tempo Médio" — reduces cognitive load for unfamiliar users |
+| **Priority: text + icon, not just color** | WCAG requires not relying solely on color for information |
+| **Reduced motion support** | Some users have vestibular disorders; animations should be optional |
+| **Card-list on mobile** | Data tables with 6+ columns are unusable on 375px screens |
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Run `npm run build` to verify no compilation errors after changes
+- Run `npm run dev` and visually verify all screens in the browser
+
+### Browser Verification
+- Navigate each screen flow: landing → host-setup → host-panel (with mock data)
+- Navigate: landing → client-checkin → live-ticket (with mock data)
+- Verify responsive layouts at 375px, 768px, and 1280px widths
+- Verify dark mode and light mode
+- Verify keyboard navigation (Tab through all interactive elements)
+- Verify no horizontal scroll at any breakpoint
+
+### Accessibility Checks
+- Verify contrast ratios meet WCAG AA (4.5:1 for text, 3:1 for large text)
+- Verify all buttons have minimum 48px touch targets
+- Verify zoom works up to 200%
+- Verify focus states are visible on all interactive elements

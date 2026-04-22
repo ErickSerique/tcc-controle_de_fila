@@ -5,19 +5,20 @@ import Modal from "../components/Modal";
 import { exportToCSV, exportToJSON } from "../lib/export";
 
 const PRIORITY_OPTIONS = [
-  { value: 3, label: "🔴 Alta", color: "#F87171" },
-  { value: 2, label: "🟡 Média", color: "#FCD34D" },
-  { value: 1, label: "🟢 Baixa", color: "#6EE7B7" },
+  { value: 3, label: "🔴 Alta", color: "var(--danger)" },
+  { value: 2, label: "🟡 Média", color: "var(--warn)" },
+  { value: 1, label: "🟢 Baixa", color: "var(--success)" },
 ];
 
 const getPriorityColor = (p) =>
-  p === 3 ? "#F87171" : p === 2 ? "#FCD34D" : "#6EE7B7";
+  p === 3 ? "var(--danger)" : p === 2 ? "var(--warn)" : "var(--success)";
 
 const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
   const [queue, setQueue] = useState([]);
   const [servedCount, setServedCount] = useState(0);
   const [manualModal, setManualModal] = useState(false);
   const [closeDayModal, setCloseDayModal] = useState(false);
+  const [confirmCloseModal, setConfirmCloseModal] = useState(false);
   const [report, setReport] = useState(null);
   const [manualForm, setManualForm] = useState({ name: "", category: room.categories[0]?.name || "" });
   const [callLoading, setCallLoading] = useState(false);
@@ -45,7 +46,9 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
   };
 
   const removeTicket = (token) => {
-    socket.emit("host:remove", { roomCode, token });
+    if (window.confirm("Tem certeza que deseja remover este cliente da fila?")) {
+      socket.emit("host:remove", { roomCode, token });
+    }
   };
 
   const changePriority = (token, priority) => {
@@ -60,6 +63,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
   };
 
   const handleCloseDay = async () => {
+    setConfirmCloseModal(false);
     try {
       const res = await fetch(`/api/rooms/${roomCode}/close`, { method: "POST" });
       const data = await res.json();
@@ -74,82 +78,46 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
   const totalWait = queue.reduce((s, t) => s + t.tma, 0);
   const nextName = queue[0]?.name?.split(" ")[0] || "—";
 
-  const formatWait = (mins) => (mins === 0 ? "Agora" : `~${mins}min`);
+  const formatWait = (mins) => (mins === 0 ? "Agora" : `~${mins} min`);
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--bg)",
-        padding: "16px 20px 40px",
-        maxWidth: "960px",
-        margin: "0 auto",
-      }}
-    >
+    <div className="screen-container container-lg">
       {/* ── Top Bar ── */}
-      <div
-        className="animate-fade"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: "24px",
-          paddingTop: "8px",
-          flexWrap: "wrap",
-          gap: "12px",
-        }}
-      >
+      <div className="animate-fade flex-row justify-between" style={{ marginBottom: "var(--space-2xl)", flexWrap: "wrap", gap: "var(--space-md)" }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-            <span style={{ fontSize: "18px", fontWeight: 800 }}>
-              fila<span style={{ color: "var(--accent)" }}>.io</span>
+          <div className="flex-row gap-sm" style={{ marginBottom: "var(--space-xs)" }}>
+            <span style={{ fontSize: "var(--text-xl)", fontWeight: 800 }}>
+              fila<span className="text-accent">.io</span>
             </span>
-            <span className="tag" style={{ background: "var(--accent-glow)", color: "var(--accent)", border: "1px solid var(--accent-dim)" }}>
-              HOST
-            </span>
+            <span className="tag">HOST</span>
           </div>
-          <div style={{ fontSize: "14px", color: "var(--text-muted)" }}>{room.name}</div>
+          <div className="text-muted" style={{ fontSize: "var(--text-sm)" }}>Sala: {room.name}</div>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <button
-            className="btn"
-            onClick={onBack}
-            style={{
-              background: "transparent",
-              color: "var(--text-muted)",
-              border: "1px solid var(--border)",
-              padding: "7px 14px",
-              borderRadius: "8px",
-              fontSize: "13px",
-            }}
-          >
-            ← Voltar
+        
+        <div className="flex-row gap-md" style={{ flexWrap: "wrap" }}>
+          <button className="btn btn-secondary" onClick={onBack} aria-label="Voltar" style={{ minHeight: "40px", padding: "0 var(--space-md)" }}>
+            <span aria-hidden="true">←</span> Voltar
           </button>
-          <div className="card" style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px" }}>
+          
+          <div className="card flex-row gap-sm" style={{ padding: "var(--space-xs) var(--space-lg)", borderRadius: "var(--radius-full)" }}>
             <span
               style={{
-                width: 8, height: 8,
+                width: "8px", height: "8px",
                 borderRadius: "50%",
-                background: "var(--accent)",
-                boxShadow: "0 0 8px var(--accent)",
-                display: "inline-block",
+                background: "var(--success)",
+                boxShadow: "0 0 8px var(--success)",
               }}
+              aria-hidden="true"
             />
-            <span className="mono" style={{ fontSize: "14px", color: "var(--accent)", fontWeight: 600, letterSpacing: "0.15em" }}>
-              {roomCode}
+            <span className="mono text-accent" style={{ fontSize: "var(--text-md)", fontWeight: 700, letterSpacing: "0.15em" }}>
+              CÓDIGO: {roomCode}
             </span>
           </div>
+          
           <button
-            className="btn"
-            onClick={handleCloseDay}
-            style={{
-              background: "#7f1d1d44",
-              color: "var(--danger)",
-              border: "1px solid rgba(248,113,113,0.3)",
-              padding: "8px 16px",
-              borderRadius: "8px",
-              fontSize: "13px",
-            }}
+            className="btn btn-danger"
+            onClick={() => setConfirmCloseModal(true)}
+            style={{ minHeight: "40px", padding: "0 var(--space-md)" }}
           >
             Encerrar Dia
           </button>
@@ -157,139 +125,70 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
       </div>
 
       {/* ── Stats Row ── */}
-      <div
-        className="animate-fade"
-        style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px" }}
-      >
+      <div className="animate-fade grid responsive-grid-4 gap-md" style={{ marginBottom: "var(--space-2xl)" }}>
         {[
-          { label: "Na Fila", value: queue.length, color: "var(--accent)" },
-          { label: "Atendidos", value: servedCount, color: "var(--purple)" },
-          { label: "Próximo", value: nextName, color: "var(--warn)" },
-          { label: "Espera Máx", value: formatWait(totalWait), color: "var(--info)" },
+          { label: "Pessoas na Fila", value: queue.length, color: "var(--accent)" },
+          { label: "Atendidos Hoje", value: servedCount, color: "var(--purple)" },
+          { label: "Próximo Cliente", value: nextName, color: "var(--warn)" },
+          { label: "Espera Máxima", value: formatWait(totalWait), color: "var(--info)" },
         ].map((s) => (
-          <div key={s.label} className="card" style={{ padding: "14px", textAlign: "center" }}>
-            <div
-              className="mono"
-              style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.08em" }}
-            >
-              {s.label}
-            </div>
-            <div
-              className="mono"
-              style={{ fontSize: "22px", fontWeight: 800, color: s.color }}
-            >
-              {s.value}
-            </div>
+          <div key={s.label} className="card stat-card">
+            <div className="stat-card-label">{s.label}</div>
+            <div className="stat-card-value" style={{ color: s.color }}>{s.value}</div>
           </div>
         ))}
       </div>
 
-      {/* ── QR + Action buttons ── */}
-      <div
-        className="animate-fade"
-        style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "16px", marginBottom: "20px" }}
-      >
-        <div className="card" style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-          <QRDisplay code={roomCode} size={110} />
-          <span className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", letterSpacing: "0.08em" }}>
-            QR DA SALA
-          </span>
+      {/* ── Action buttons & QR ── */}
+      <div className="animate-fade grid responsive-grid-3 gap-lg" style={{ marginBottom: "var(--space-2xl)" }}>
+        <div className="card text-center" style={{ gridColumn: "span 1" }}>
+          <QRDisplay code={roomCode} size={160} />
+          <div className="mono text-muted" style={{ fontSize: "var(--text-xs)", marginTop: "var(--space-sm)", letterSpacing: "0.08em" }}>
+            QR CODE DA SALA
+          </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div className="flex-col gap-md" style={{ gridColumn: "span 2", justifyContent: "center" }}>
           <button
-            className="btn"
+            className="btn btn-primary"
             onClick={callNext}
             disabled={queue.length === 0 || callLoading}
-            style={{
-              flex: 1,
-              background:
-                queue.length > 0 && !callLoading
-                  ? "linear-gradient(135deg, var(--accent), #34d399)"
-                  : "#1e293b",
-              color: queue.length > 0 && !callLoading ? "#022c22" : "var(--text-dim)",
-              borderRadius: "12px",
-              fontSize: "15px",
-              fontWeight: 800,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              minHeight: "56px",
-              boxShadow:
-                queue.length > 0 && !callLoading ? "0 8px 24px var(--accent-glow)" : "none",
-              transition: "all 0.3s",
-            }}
+            style={{ fontSize: "var(--text-xl)", minHeight: "80px", width: "100%" }}
+            aria-label={queue.length > 0 ? "Chamar próximo cliente da fila" : "Fila vazia"}
           >
-            {callLoading ? "📡 Chamando..." : "📢 Chamar Próximo"}
+            {callLoading ? "📡 Chamando Painel..." : "📢 CHAMAR PRÓXIMO DA FILA"}
           </button>
+          
           <button
-            className="btn"
+            className="btn btn-secondary"
             onClick={() => setManualModal(true)}
-            style={{
-              flex: 1,
-              background: "rgba(96,165,250,0.08)",
-              color: "var(--info)",
-              border: "1px solid rgba(96,165,250,0.25)",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              minHeight: "44px",
-            }}
+            style={{ minHeight: "64px" }}
           >
-            ➕ Adicionar Manualmente
+            ➕ Adicionar Cliente Manualmente
           </button>
         </div>
       </div>
 
       {/* ── Queue Table ── */}
-      <div className="card animate-fade" style={{ overflow: "hidden" }}>
-        <div
-          style={{
-            padding: "16px 20px",
-            borderBottom: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <h3 style={{ fontWeight: 700, fontSize: "15px" }}>Fila Ativa</h3>
-          <span className="tag" style={{ background: "var(--accent-glow)", color: "var(--accent)" }}>
-            {queue.length} aguardando
-          </span>
+      <div className="card animate-fade" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="flex-row justify-between" style={{ padding: "var(--space-lg) var(--space-xl)", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+          <h2 style={{ fontSize: "var(--text-lg)", margin: 0 }}>Fila de Espera Ativa</h2>
+          <span className="tag">{queue.length} aguardando</span>
         </div>
 
         {queue.length === 0 ? (
-          <div style={{ padding: "48px", textAlign: "center", color: "var(--text-muted)" }}>
-            <div style={{ fontSize: "40px", marginBottom: "12px" }}>🎉</div>
-            <div style={{ fontWeight: 600, marginBottom: "4px" }}>Fila vazia!</div>
-            <div style={{ fontSize: "13px" }}>Aguardando novos clientes...</div>
+          <div className="text-center text-muted" style={{ padding: "var(--space-3xl)" }}>
+            <div style={{ fontSize: "var(--text-4xl)", marginBottom: "var(--space-md)" }} aria-hidden="true">🎉</div>
+            <h3 style={{ marginBottom: "var(--space-xs)" }}>A fila está vazia!</h3>
+            <p>Nenhum cliente aguardando atendimento no momento.</p>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <div className="table-container">
+            <table className="table">
               <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["#", "Nome", "Categoria", "Prioridade", "Espera Est.", "Ações"].map((h) => (
-                    <th
-                      key={h}
-                      className="mono"
-                      style={{
-                        padding: "12px 16px",
-                        textAlign: "left",
-                        fontSize: "10px",
-                        color: "var(--text-muted)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.08em",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {h}
-                    </th>
+                <tr>
+                  {["#", "Nome do Cliente", "Serviço", "Prioridade", "Espera Est.", "Ações"].map((h) => (
+                    <th key={h} scope="col">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -299,60 +198,37 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                     key={t.token}
                     className="animate-slide"
                     style={{
-                      borderBottom: "1px solid var(--border)",
                       animationDelay: `${i * 0.03}s`,
-                      transition: "background 0.15s",
-                      background: i === 0 ? "rgba(110,231,183,0.04)" : "transparent",
+                      background: i === 0 ? "var(--accent-light)" : "transparent",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover)")}
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.background =
-                        i === 0 ? "rgba(110,231,183,0.04)" : "transparent")
-                    }
                   >
-                    <td style={{ padding: "14px 16px" }}>
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: "16px",
-                          fontWeight: 700,
-                          color: i === 0 ? "var(--accent)" : "var(--text-muted)",
-                        }}
-                      >
-                        {t.position}
+                    <td>
+                      <span className="mono" style={{ fontSize: "var(--text-lg)", fontWeight: 700, color: i === 0 ? "var(--accent)" : "var(--text-muted)" }}>
+                        {t.position}º
                       </span>
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</span>
-                        {t.manual && (
-                          <span
-                            className="tag"
-                            style={{ background: "rgba(96,165,250,0.12)", color: "var(--info)", fontSize: "10px" }}
-                          >
-                            Manual
-                          </span>
-                        )}
+                    <td>
+                      <div className="flex-row gap-sm">
+                        <span style={{ fontWeight: 600, fontSize: "var(--text-md)" }}>{t.name}</span>
+                        {t.manual && <span className="badge" style={{ background: "rgba(59, 130, 246, 0.1)", color: "var(--info)" }}>Manual</span>}
                       </div>
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{t.category}</span>
+                    <td>
+                      <span className="text-muted">{t.category}</span>
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
+                    <td>
                       <select
-                        className="mono"
+                        className="input"
                         value={t.priority}
                         onChange={(e) => changePriority(t.token, parseInt(e.target.value))}
+                        aria-label={`Prioridade para ${t.name}`}
                         style={{
-                          background: "var(--surface)",
-                          border: `1px solid ${getPriorityColor(t.priority)}44`,
+                          minHeight: "36px",
+                          padding: "var(--space-xs) var(--space-sm)",
+                          border: `1px solid ${getPriorityColor(t.priority)}`,
                           color: getPriorityColor(t.priority),
-                          borderRadius: "6px",
-                          padding: "4px 8px",
-                          fontSize: "12px",
-                          fontFamily: "JetBrains Mono",
-                          cursor: "pointer",
-                          outline: "none",
+                          fontWeight: 600,
+                          width: "auto"
                         }}
                       >
                         {PRIORITY_OPTIONS.map((o) => (
@@ -360,39 +236,26 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                         ))}
                       </select>
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <span className="mono" style={{ fontSize: "13px", color: "var(--warn)" }}>
+                    <td>
+                      <span className="mono text-warn" style={{ fontWeight: 600 }}>
                         {formatWait(t.estimatedWait || 0)}
                       </span>
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <div style={{ display: "flex", gap: "6px" }}>
+                    <td>
+                      <div className="flex-row gap-sm">
                         <button
-                          className="btn"
+                          className="btn btn-primary"
                           onClick={callNext}
-                          style={{
-                            background: "var(--accent-glow)",
-                            color: "var(--accent)",
-                            border: "1px solid var(--accent-dim)",
-                            padding: "6px 12px",
-                            borderRadius: "6px",
-                            fontSize: "12px",
-                          }}
+                          disabled={i !== 0} // Only allow calling the first person directly from the row for logical consistency
+                          style={{ minHeight: "36px", padding: "0 var(--space-md)" }}
+                          aria-label={`Chamar ${t.name}`}
                         >
                           Chamar
                         </button>
                         <button
-                          className="btn"
+                          className="btn btn-danger btn-icon"
                           onClick={() => removeTicket(t.token)}
-                          style={{
-                            background: "#7f1d1d44",
-                            color: "var(--danger)",
-                            border: "1px solid rgba(248,113,113,0.2)",
-                            padding: "6px 10px",
-                            borderRadius: "6px",
-                            fontSize: "12px",
-                          }}
-                          aria-label="Remover da fila"
+                          aria-label={`Remover ${t.name} da fila`}
                         >
                           ✕
                         </button>
@@ -407,28 +270,26 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
       </div>
 
       {/* ── Manual Add Modal ── */}
-      <Modal open={manualModal} onClose={() => setManualModal(false)}>
-        <h3 style={{ fontWeight: 700, marginBottom: "20px", fontSize: "18px" }}>
-          ➕ Adicionar Manualmente
-        </h3>
-        <div style={{ marginBottom: "16px" }}>
-          <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px", textTransform: "uppercase" }}>
-            Nome do Cliente
-          </label>
+      <Modal open={manualModal} onClose={() => setManualModal(false)} titleId="manual-add-title">
+        <h2 id="manual-add-title">➕ Adicionar Cliente Manualmente</h2>
+        
+        <div style={{ marginBottom: "var(--space-lg)" }}>
+          <label htmlFor="manual-name" className="label">Nome Completo do Cliente</label>
           <input
+            id="manual-name"
             className="input"
-            placeholder="Nome completo"
+            placeholder="Ex: Maria Oliveira"
             value={manualForm.name}
             onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
             onKeyDown={(e) => e.key === "Enter" && addManual()}
             autoFocus
           />
         </div>
-        <div style={{ marginBottom: "24px" }}>
-          <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px", textTransform: "uppercase" }}>
-            Categoria
-          </label>
+        
+        <div style={{ marginBottom: "var(--space-xl)" }}>
+          <label htmlFor="manual-category" className="label">Serviço Desejado</label>
           <select
+            id="manual-category"
             className="input"
             value={manualForm.category}
             onChange={(e) => setManualForm({ ...manualForm, category: e.target.value })}
@@ -438,139 +299,74 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
             ))}
           </select>
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button
-            className="btn"
-            onClick={() => setManualModal(false)}
-            style={{
-              flex: 1,
-              padding: "14px",
-              background: "var(--surface)",
-              color: "var(--text-muted)",
-              border: "1px solid var(--border)",
-              borderRadius: "10px",
-              fontSize: "14px",
-            }}
-          >
+        
+        <div className="flex-row gap-md">
+          <button className="btn btn-secondary" onClick={() => setManualModal(false)} style={{ flex: 1 }}>
             Cancelar
           </button>
-          <button
-            className="btn"
-            onClick={addManual}
-            style={{
-              flex: 2,
-              padding: "14px",
-              background: "linear-gradient(135deg, var(--accent), #34d399)",
-              color: "#022c22",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 800,
-            }}
-          >
+          <button className="btn btn-primary" onClick={addManual} style={{ flex: 2 }}>
             Adicionar à Fila
           </button>
         </div>
       </Modal>
 
+      {/* ── Confirm Close Day Modal ── */}
+      <Modal open={confirmCloseModal} onClose={() => setConfirmCloseModal(false)} titleId="confirm-close-title">
+         <h2 id="confirm-close-title" className="text-danger">⚠️ Encerrar Expediente</h2>
+         <p>Tem certeza que deseja encerrar o dia? A sala será fechada, todos os clientes na fila serão removidos, e o relatório final será gerado.</p>
+         <div className="flex-row gap-md" style={{ marginTop: "var(--space-xl)" }}>
+            <button className="btn btn-secondary" onClick={() => setConfirmCloseModal(false)} style={{ flex: 1 }}>
+               Cancelar
+            </button>
+            <button className="btn btn-danger" onClick={handleCloseDay} style={{ flex: 1 }}>
+               Sim, Encerrar Dia
+            </button>
+         </div>
+      </Modal>
+
       {/* ── Close Day / Report Modal ── */}
-      <Modal open={closeDayModal} onClose={() => {}} maxWidth="500px">
+      <Modal open={closeDayModal} onClose={() => {}} maxWidth="600px" titleId="report-title">
         {report && (
-          <>
-            <div style={{ textAlign: "center", marginBottom: "28px" }}>
-              <div style={{ fontSize: "52px", marginBottom: "12px" }}>📊</div>
-              <h2 style={{ fontSize: "22px", fontWeight: 800, marginBottom: "4px" }}>
-                Relatório da Sessão
-              </h2>
-              <p className="mono" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
-                {report.roomName} · {new Date(report.date).toLocaleDateString("pt-BR")}
+          <div className="flex-col gap-lg">
+            <div className="text-center">
+              <div style={{ fontSize: "var(--text-5xl)", marginBottom: "var(--space-sm)" }} aria-hidden="true">📊</div>
+              <h2 id="report-title">Relatório da Sessão</h2>
+              <p className="mono text-muted">
+                Sala: {report.roomName} · {new Date(report.date).toLocaleDateString("pt-BR")}
               </p>
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "10px",
-                marginBottom: "24px",
-              }}
-            >
+            <div className="grid responsive-grid-4 gap-md">
               {[
-                { label: "Atendidos", value: report.totalServed, color: "var(--accent)" },
+                { label: "Atendidos", value: report.totalServed, color: "var(--success)" },
                 { label: "Abandonos", value: report.totalAbandoned, color: "var(--danger)" },
-                { label: "Espera Média", value: `${report.avgWaitMinutes}min`, color: "var(--warn)" },
-                { label: "Sala", value: report.roomCode, color: "var(--purple)" },
+                { label: "Espera Média", value: `${report.avgWaitMinutes} min`, color: "var(--warn)" },
+                { label: "Código", value: report.roomCode, color: "var(--purple)" },
               ].map((s) => (
-                <div
-                  key={s.label}
-                  style={{
-                    background: "var(--surface-hover)",
-                    borderRadius: "10px",
-                    padding: "16px",
-                    textAlign: "center",
-                  }}
-                >
-                  <div className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase" }}>
-                    {s.label}
-                  </div>
-                  <div
-                    className="mono"
-                    style={{ fontSize: "26px", fontWeight: 800, color: s.color }}
-                  >
-                    {s.value}
-                  </div>
+                <div key={s.label} className="card stat-card" style={{ gridColumn: "span 2" }}>
+                  <div className="stat-card-label">{s.label}</div>
+                  <div className="stat-card-value" style={{ color: s.color }}>{s.value}</div>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
-              <button
-                className="btn"
-                onClick={() => exportToCSV(report)}
-                style={{
-                  padding: "14px",
-                  background: "var(--accent-glow)",
-                  color: "var(--accent)",
-                  border: "1px solid var(--accent-dim)",
-                  borderRadius: "10px",
-                  fontSize: "14px",
-                  fontWeight: 700,
-                }}
-              >
-                📥 Baixar como .CSV
+            <div className="flex-col gap-md" style={{ margin: "var(--space-xl) 0" }}>
+              <button className="btn btn-secondary" onClick={() => exportToCSV(report)}>
+                📥 Baixar Relatório Completo (.CSV para Excel)
               </button>
-              <button
-                className="btn"
-                onClick={() => exportToJSON(report)}
-                style={{
-                  padding: "14px",
-                  background: "rgba(167,139,250,0.08)",
-                  color: "var(--purple)",
-                  border: "1px solid rgba(167,139,250,0.25)",
-                  borderRadius: "10px",
-                  fontSize: "14px",
-                  fontWeight: 700,
-                }}
-              >
-                📥 Baixar como .JSON
+              <button className="btn btn-ghost" onClick={() => exportToJSON(report)}>
+                📥 Baixar Dados Técnicos (.JSON)
               </button>
             </div>
 
             <button
-              className="btn"
+              className="btn btn-danger"
               onClick={() => { setCloseDayModal(false); onCloseDay(); }}
-              style={{
-                width: "100%",
-                padding: "12px",
-                background: "#7f1d1d44",
-                color: "var(--danger)",
-                border: "1px solid rgba(248,113,113,0.25)",
-                borderRadius: "8px",
-                fontSize: "13px",
-              }}
+              style={{ width: "100%", minHeight: "56px" }}
             >
-              Encerrar e Voltar ao Início
+              Fechar Painel e Voltar ao Início
             </button>
-          </>
+          </div>
         )}
       </Modal>
     </div>

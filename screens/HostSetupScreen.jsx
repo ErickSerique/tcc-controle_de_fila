@@ -1,9 +1,9 @@
 import { useState } from "react";
 
 const PRIORITY_OPTIONS = [
-  { value: 3, label: "🔴 Alta", color: "#F87171", bg: "#7f1d1d44" },
-  { value: 2, label: "🟡 Média", color: "#FCD34D", bg: "#78350f44" },
-  { value: 1, label: "🟢 Baixa", color: "#6EE7B7", bg: "#14532d44" },
+  { value: 3, label: "🔴 Alta", color: "var(--danger)", bg: "rgba(239, 68, 68, 0.1)" },
+  { value: 2, label: "🟡 Média", color: "var(--warn)", bg: "rgba(245, 158, 11, 0.1)" },
+  { value: 1, label: "🟢 Baixa", color: "var(--success)", bg: "rgba(16, 185, 129, 0.1)" },
 ];
 
 const getPriority = (p) => PRIORITY_OPTIONS.find((o) => o.value === p) || PRIORITY_OPTIONS[2];
@@ -55,66 +55,37 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--bg)",
-        padding: "24px",
-        maxWidth: "600px",
-        margin: "0 auto",
-      }}
-    >
-      <div className="animate-fade">
+    <div className="screen-container container-md">
+      <div className="animate-fade flex-col gap-lg">
+        
         {/* Header */}
-        <div style={{ paddingTop: "16px", marginBottom: "32px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "20px", fontWeight: 800 }}>
-                fila<span style={{ color: "var(--accent)" }}>.io</span>
-              </span>
-              <span
-                className="tag"
-                style={{
-                  background: "var(--accent-glow)",
-                  color: "var(--accent)",
-                  border: "1px solid var(--accent-dim)",
-                }}
-              >
-                HOST
-              </span>
-            </div>
+        <div>
+          <div className="flex-row justify-between" style={{ marginBottom: "var(--space-md)" }}>
             <button
-              className="btn"
+              className="btn btn-secondary"
               onClick={onBack}
-              style={{
-                background: "transparent",
-                color: "var(--text-muted)",
-                border: "1px solid var(--border)",
-                padding: "7px 14px",
-                borderRadius: "8px",
-                fontSize: "13px",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
+              style={{ minHeight: "36px", padding: "var(--space-xs) var(--space-md)", fontSize: "var(--text-sm)" }}
             >
-              ← Voltar
+              <span aria-hidden="true">←</span> Voltar
             </button>
+            <div className="flex-row gap-sm">
+              <span style={{ fontSize: "var(--text-xl)", fontWeight: 800 }}>
+                fila<span className="text-accent">.io</span>
+              </span>
+              <span className="tag">HOST</span>
+            </div>
           </div>
-          <h1 style={{ fontSize: "26px", fontWeight: 800, letterSpacing: "-0.02em" }}>
-            Configurar Sala
-          </h1>
-          <p style={{ color: "var(--text-muted)", fontSize: "13px", marginTop: "4px" }}>
-            Defina os serviços e seus pesos de prioridade
-          </p>
+          <h1>Configurar Sala</h1>
+          <p>Defina os serviços e seus pesos de prioridade</p>
         </div>
 
         {/* Room Name */}
-        <div style={{ marginBottom: "28px" }}>
-          <label className="mono" style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+        <div>
+          <label htmlFor="room-name" className="label">
             Nome da Sala
           </label>
           <input
+            id="room-name"
             className="input"
             placeholder="ex: Clínica Central — Turno Manhã"
             value={roomName}
@@ -123,55 +94,45 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
         </div>
 
         {/* Category list */}
-        <div style={{ marginBottom: "28px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-            <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        <div>
+          <div className="flex-row justify-between" style={{ marginBottom: "var(--space-md)" }}>
+            <span className="label" style={{ marginBottom: 0 }}>
               Categorias de Atendimento
-            </label>
-            <span className="tag" style={{ background: "var(--accent-glow)", color: "var(--accent)" }}>
-              {categories.length}
             </span>
+            <span className="tag">{categories.length}</span>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px" }}>
+          <div className="flex-col gap-sm" style={{ marginBottom: "var(--space-lg)" }}>
             {categories.map((cat, i) => {
               const p = getPriority(cat.priority);
               return (
                 <div
                   key={i}
-                  className="card animate-slide"
+                  className="card animate-slide flex-row gap-md"
                   style={{
-                    padding: "12px 16px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
+                    padding: "var(--space-md) var(--space-lg)",
                     animationDelay: `${i * 0.04}s`,
                   }}
                 >
                   <span
                     className="tag"
-                    style={{ background: p.bg, color: p.color, minWidth: "76px", justifyContent: "center" }}
+                    style={{ background: p.bg, color: p.color, minWidth: "80px" }}
                   >
                     {p.label}
                   </span>
-                  <span style={{ flex: 1, fontWeight: 600, fontSize: "14px" }}>{cat.name}</span>
-                  <span className="mono" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
-                    ~{cat.tma}min
+                  <span style={{ flex: 1, fontWeight: 600 }}>{cat.name}</span>
+                  <span className="text-muted" style={{ fontSize: "var(--text-sm)" }}>
+                    ~{cat.tma} min
                   </span>
                   <button
-                    className="btn"
+                    className="btn btn-ghost btn-icon text-danger"
                     onClick={() => removeCategory(i)}
-                    style={{
-                      background: "transparent",
-                      color: "var(--danger)",
-                      fontSize: "18px",
-                      padding: "2px 6px",
-                      borderRadius: "6px",
-                      lineHeight: 1,
-                    }}
-                    aria-label="Remover categoria"
+                    aria-label={`Remover categoria ${cat.name}`}
                   >
-                    ×
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
                   </button>
                 </div>
               );
@@ -179,24 +140,15 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
           </div>
 
           {/* Add category form */}
-          <div className="card" style={{ padding: "18px" }}>
-            <p className="mono" style={{ fontSize: "11px", color: "var(--accent)", marginBottom: "14px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          <div className="card">
+            <h3 className="text-accent" style={{ fontSize: "var(--text-sm)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "var(--space-md)" }}>
               + Nova Categoria
-            </p>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 110px 80px",
-                gap: "10px",
-                alignItems: "end",
-                marginBottom: "12px",
-              }}
-            >
+            </h3>
+            <div className="grid responsive-grid-3 gap-md" style={{ alignItems: "end", marginBottom: "var(--space-lg)" }}>
               <div>
-                <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>
-                  Nome
-                </label>
+                <label htmlFor="cat-name" className="label">Nome</label>
                 <input
+                  id="cat-name"
                   className="input"
                   placeholder="ex: Retorno"
                   value={newCat.name}
@@ -205,10 +157,9 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
                 />
               </div>
               <div>
-                <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>
-                  Prioridade
-                </label>
+                <label htmlFor="cat-priority" className="label">Prioridade</label>
                 <select
+                  id="cat-priority"
                   className="input"
                   value={newCat.priority}
                   onChange={(e) => setNewCat({ ...newCat, priority: parseInt(e.target.value) })}
@@ -219,10 +170,9 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
                 </select>
               </div>
               <div>
-                <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>
-                  TMA (min)
-                </label>
+                <label htmlFor="cat-tma" className="label">Tempo Médio (min)</label>
                 <input
+                  id="cat-tma"
                   className="input"
                   type="number"
                   min={1}
@@ -232,19 +182,7 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
                 />
               </div>
             </div>
-            <button
-              className="btn"
-              onClick={addCategory}
-              style={{
-                width: "100%",
-                padding: "10px",
-                background: "var(--accent-glow)",
-                color: "var(--accent)",
-                border: "1px solid var(--accent-dim)",
-                borderRadius: "8px",
-                fontSize: "13px",
-              }}
-            >
+            <button className="btn btn-secondary" onClick={addCategory} style={{ width: "100%" }}>
               Adicionar Categoria
             </button>
           </div>
@@ -254,59 +192,34 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
         <div
           className="card"
           style={{
-            padding: "16px 18px",
-            marginBottom: "24px",
-            background: "rgba(167,139,250,0.06)",
-            border: "1px solid rgba(167,139,250,0.2)",
+            background: "rgba(167, 139, 250, 0.05)",
+            borderColor: "rgba(167, 139, 250, 0.2)",
           }}
         >
-          <p className="mono" style={{ fontSize: "11px", color: "var(--purple)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            Algoritmo de Previsão
+          <div className="text-purple mono" style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "var(--space-xs)" }}>
+            Informação do Sistema
+          </div>
+          <p className="text-muted" style={{ fontSize: "var(--text-sm)", marginBottom: "var(--space-xs)" }}>
+            O tempo de espera estimado é calculado baseando-se nas pessoas na fila multiplicadas pelo tempo médio de atendimento da categoria.
           </p>
-          <p className="mono" style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-            T_est = Σ ( Pessoas_na_Frente × TMA_da_Categoria )
-          </p>
-          <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "4px" }}>
-            Filas re-ordenadas por prioridade a cada evento
+          <p className="text-dim" style={{ fontSize: "var(--text-xs)", margin: 0 }}>
+            As filas são reordenadas dinamicamente conforme a prioridade selecionada.
           </p>
         </div>
 
         {error && (
-          <div
-            style={{
-              background: "#7f1d1d44",
-              border: "1px solid rgba(248,113,113,0.3)",
-              borderRadius: "8px",
-              padding: "12px 16px",
-              color: "var(--danger)",
-              fontSize: "13px",
-              marginBottom: "16px",
-            }}
-          >
-            ⚠️ {error}
+          <div className="alert alert-danger" role="alert">
+            <span aria-hidden="true">⚠️</span> {error}
           </div>
         )}
 
         <button
-          className="btn"
+          className="btn btn-primary"
           onClick={createRoom}
           disabled={loading}
-          style={{
-            width: "100%",
-            padding: "18px",
-            background: loading
-              ? "var(--accent-dim)"
-              : "linear-gradient(135deg, var(--accent), #34d399)",
-            color: "#022c22",
-            borderRadius: "12px",
-            fontSize: "16px",
-            fontWeight: 800,
-            letterSpacing: "0.02em",
-            boxShadow: loading ? "none" : "0 8px 32px var(--accent-glow)",
-            transition: "all 0.3s",
-          }}
+          style={{ width: "100%", minHeight: "56px", fontSize: "var(--text-lg)" }}
         >
-          {loading ? "⚡ Criando Sala..." : "🚀 Criar Sala e Abrir Fila"}
+          {loading ? "Criando Sala..." : "🚀 Criar Sala e Abrir Fila"}
         </button>
       </div>
     </div>
