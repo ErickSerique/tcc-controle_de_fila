@@ -34,8 +34,13 @@ const generateCode = async () => {
  * Algoritmo de fila priorizada com previsão de espera.
  * Ordenação: prioridade DESC → joinedAt ASC (FIFO na mesma prioridade).
  * Complexidade: O(n log n)
+ *
+ * @param {Array}  queue        - Tickets na fila
+ * @param {Object} [dynamicTma] - Mapa de { category: avgMinutos } com TMA real
+ *                                 calculado a partir dos atendimentos já realizados.
+ *                                 Quando disponível, substitui o tma estático da categoria.
  */
-const recalcPositions = (queue) => {
+const recalcPositions = (queue, dynamicTma = null) => {
   queue.sort((a, b) => {
     if (b.priority !== a.priority) return b.priority - a.priority;
     return a.joinedAt - b.joinedAt;
@@ -45,7 +50,12 @@ const recalcPositions = (queue) => {
   queue.forEach((ticket, i) => {
     ticket.position = i + 1;
     ticket.estimatedWait = accumulated;
-    accumulated += ticket.tma;
+
+    // Usa TMA dinâmico se disponível para a categoria, senão usa o estático
+    const effectiveTma = (dynamicTma && dynamicTma[ticket.category] != null)
+      ? Math.round(dynamicTma[ticket.category])
+      : ticket.tma;
+    accumulated += effectiveTma;
   });
 
   return queue;

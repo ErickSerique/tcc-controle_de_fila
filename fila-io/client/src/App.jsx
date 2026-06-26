@@ -17,7 +17,7 @@
  *   live-ticket     → LiveTicketScreen
  *   members         → MembersScreen
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ThemeProvider } from "./hooks/useTheme";
 
@@ -51,22 +51,51 @@ const LoadingScreen = () => (
 );
 
 // ── Router interno (requer AuthProvider) ─────────────────────────
+const SESSION_KEY = "fila_io_nav_state";
+
 const Router = () => {
   const { session, activeOrg, loading } = useAuth();
-  // Analisa a URL para suportar deep links (QR Code)
+
+  // Restaura estado da sessão (sobrevive ao reload)
   const [screen, setScreen] = useState(() => {
+    // Deep link via URL (QR Code)
     if (window.location.pathname.match(/^\/join\/([A-Z0-9]{6})\/?$/i)) return "client-checkin";
+    // Restaura do sessionStorage
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY));
+      if (saved?.screen) return saved.screen;
+    } catch {}
     return "landing";
   });
   
   const [ctx, setCtx] = useState(() => {
+    // Deep link via URL (QR Code)
     const match = window.location.pathname.match(/^\/join\/([A-Z0-9]{6})\/?$/i);
     if (match) return { initialCode: match[1].toUpperCase() };
+    // Restaura do sessionStorage
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY));
+      if (saved?.ctx) return saved.ctx;
+    } catch {}
     return {};
   });
 
+  // Persiste estado no sessionStorage a cada mudança
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ screen, ctx }));
+    } catch {}
+  }, [screen, ctx]);
+
   const navigate = (target, data = {}) => {
-    if (window.history.pushState) window.history.pushState({}, "", "/"); // limpa url
+    // Não limpar a URL se contém parâmetros de autenticação (magic link PKCE)
+    const url = new URL(window.location.href);
+    const hasAuthParams = url.searchParams.has("code") || 
+                          url.hash.includes("access_token") ||
+                          url.hash.includes("type=magiclink");
+    if (window.history.pushState && !hasAuthParams) {
+      window.history.pushState({}, "", "/");
+    }
     setCtx(data);
     setScreen(target);
   };

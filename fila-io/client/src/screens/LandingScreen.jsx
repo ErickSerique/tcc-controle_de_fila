@@ -290,7 +290,7 @@ const LandingScreen = ({ onNavigate }) => {
             <button className="btn" style={{ background: "var(--accent)", color: "#fff", border: "none", padding: "12px", borderRadius: "8px", fontWeight: 600, cursor: "pointer", width: "100%", marginBottom: "24px", opacity: isSubmitting ? 0.7 : 1 }} onClick={handleUpdateOrg} disabled={isSubmitting || !editOrgName.trim()}>
               {isSubmitting ? "Salvando..." : "Salvar Alterações"}
             </button>
-            
+
             {activeOrg.role === "owner" && (
               <div style={{ paddingTop: "24px", borderTop: "1px solid var(--border)" }}>
                 <h3 style={{ color: "var(--danger)", fontSize: "14px", marginBottom: "8px" }}>Zona de Perigo</h3>
@@ -303,16 +303,16 @@ const LandingScreen = ({ onNavigate }) => {
           </div>
         </div>
       )}
-    {/* Modal de confirmação de exclusão */}
-    <ConfirmModal
-      open={deleteConfirm}
-      onClose={() => setDeleteConfirm(false)}
-      onConfirm={handleDeleteOrg}
-      title="Excluir Organização"
-      message={`Tem certeza que deseja EXCLUIR a organização "${activeOrg?.name}"? Isso é irreversível e excluirá todas as salas e membros.`}
-      confirmText="Excluir Permanentemente"
-      danger
-    />
+      {/* Modal de confirmação de exclusão */}
+      <ConfirmModal
+        open={deleteConfirm}
+        onClose={() => setDeleteConfirm(false)}
+        onConfirm={handleDeleteOrg}
+        title="Excluir Organização"
+        message={`Tem certeza que deseja EXCLUIR a organização "${activeOrg?.name}"? Isso é irreversível e excluirá todas as salas e membros.`}
+        confirmText="Excluir Permanentemente"
+        danger
+      />
     </div>
   );
 };

@@ -155,17 +155,62 @@ export const AuthProvider = ({ children }) => {
       });
     }, 8000);
 
-    supabase.auth.getSession().then(({ data }) => {
-      console.log("[auth] getSession resolveu, sessão:", data.session ? "SIM" : "NÃO");
-      loadUserData(data.session);
-    }).catch((err) => {
-      console.error("[auth] getSession falhou:", err.message);
-      // Supabase inacessível — tentar sessão local
-      loadFromLocalSession().then((ok) => {
-        if (!ok) setLoading(false);
-        else setLoading(false);
-      });
-    });
+    // ── Magic Link PKCE: detectar `code` na URL ──────────────
+    // O Supabase v2 usa PKCE flow para magic links, enviando um `code`
+    // na query string que deve ser trocado por uma sessão.
+    const handleInitialSession = async () => {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+
+      if (code) {
+        console.log("[auth] Código PKCE detectado na URL, trocando por sessão...");
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.error("[auth] Erro ao trocar código PKCE:", error.message);
+            setAuthError("Falha ao autenticar via magic link. Tente novamente.");
+          } else {
+            console.log("[auth] Código PKCE trocado com sucesso.");
+          }
+          // Limpa o code da URL para evitar reprocessamento
+          url.searchParams.delete("code");
+          window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+
+          // Se o exchange teve sucesso, a sessão já será carregada pelo onAuthStateChange
+          if (data?.session) {
+            await loadUserData(data.session);
+            return; // Sessão já carregada
+          }
+        } catch (err) {
+          console.error("[auth] Exceção no exchange PKCE:", err.message);
+          // Limpa o code da URL mesmo em caso de erro
+          url.searchParams.delete("code");
+          window.history.replaceState({}, "", url.pathname);
+        }
+      }
+
+      // ── Fallback: detectar tokens na hash (fluxo implícito legado) ──
+      const hash = window.location.hash;
+      if (hash && (hash.includes("access_token") || hash.includes("type=magiclink"))) {
+        console.log("[auth] Tokens detectados na hash da URL (fluxo implícito).");
+        // O Supabase detectSessionInUrl:true já cuida disto,
+        // mas aguardamos o getSession para garantir
+      }
+
+      // Fluxo normal: buscar sessão existente
+      try {
+        const { data } = await supabase.auth.getSession();
+        console.log("[auth] getSession resolveu, sessão:", data.session ? "SIM" : "NÃO");
+        await loadUserData(data.session);
+      } catch (err) {
+        console.error("[auth] getSession falhou:", err.message);
+        // Supabase inacessível — tentar sessão local
+        const ok = await loadFromLocalSession();
+        setLoading(false);
+      }
+    };
+
+    handleInitialSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, newSession) => {

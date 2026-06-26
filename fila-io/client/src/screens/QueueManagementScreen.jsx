@@ -3,11 +3,14 @@
  *
  * Painel do host — gerencia a fila em tempo real via Socket.io.
  * Atualizado para usar o api.js centralizado e o contexto de auth.
+ *
+ * Sobrevive a reloads via sessionStorage (App.jsx persiste roomCode/room).
+ * Re-emite host:join ao reconectar o socket para manter assinatura da sala.
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../hooks/useAuth";
 import socket from "../lib/socket";
-import { closeDay as closeDayApi, fetchHistory } from "../lib/api";
+import { closeDay as closeDayApi, fetchHistory, fetchRoomPublic } from "../lib/api";
 import QRDisplay from "../components/QRDisplay";
 import Modal from "../components/Modal";
 import { exportToCSV, exportToJSON } from "../lib/export";
@@ -19,21 +22,58 @@ const PRIORITY_OPTIONS = [
 ];
 const getPriorityColor = (p) => p === 3 ? "#F87171" : p === 2 ? "#FCD34D" : "#6EE7B7";
 
-const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
+const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack }) => {
   const { activeOrg } = useAuth();
 
-  const [queue,        setQueue]        = useState([]);
-  const [calledTickets, setCalledTickets] = useState([]);
-  const [servedCount,  setServedCount]  = useState(0);
-  const [manualModal,  setManualModal]  = useState(false);
-  const [closeDayModal,setCloseDayModal]= useState(false);
-  const [report,       setReport]       = useState(null);
-  const [manualForm,   setManualForm]   = useState({ name: "", category: room.categories?.[0]?.name || "" });
-  const [callLoading,  setCallLoading]  = useState(false);
+  // Suporta reload: usa prop, mas se for null busca do backend
+  const [room, setRoom] = useState(roomProp || null);
+  const [roomLoading, setRoomLoading] = useState(!roomProp && !!roomCode);
+
+  const [queue,         setQueue]        = useState([]);
+  const [calledTickets,  setCalledTickets] = useState([]);
+  const [servedTickets,  setServedTickets] = useState([]);
+  const [servedCount,    setServedCount]   = useState(0);
+  const [manualModal,    setManualModal]   = useState(false);
+  const [closeDayModal,  setCloseDayModal] = useState(false);
+  const [report,         setReport]        = useState(null);
+  const [manualForm,     setManualForm]    = useState({ name: "", category: "" });
+  const [callLoading,    setCallLoading]   = useState(false);
+  const [selectedServed, setSelectedServed]= useState(null); // popup de ações
+
+  // Busca dados da sala se não vieram via prop (caso de reload)
+  useEffect(() => {
+    if (roomProp) {
+      setRoom(roomProp);
+      setManualForm((f) => ({ ...f, category: roomProp.categories?.[0]?.name || f.category }));
+      return;
+    }
+    if (!roomCode) return;
+
+    setRoomLoading(true);
+    fetchRoomPublic(roomCode)
+      .then((data) => {
+        setRoom(data);
+        setManualForm((f) => ({ ...f, category: data.categories?.[0]?.name || f.category }));
+      })
+      .catch((err) => console.error("[host] Falha ao carregar sala:", err.message))
+      .finally(() => setRoomLoading(false));
+  }, [roomCode, roomProp]);
 
   // ── Socket ────────────────────────────────────────────────────
+  const joinRoom = useCallback(() => {
+    if (roomCode) {
+      socket.emit("host:join", { roomCode });
+    }
+  }, [roomCode]);
+
   useEffect(() => {
-    socket.emit("host:join", { roomCode });
+    if (!roomCode) return;
+
+    // Entra na sala
+    joinRoom();
+
+    // Re-entra na sala quando o socket reconecta (troca de rede, server restart)
+    socket.on("connect", joinRoom);
 
     const handleUpdate = ({ roomCode: rc, queue: q }) => {
       if (rc !== roomCode) return;
@@ -48,21 +88,44 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
       });
     };
 
-    const handleTicketServed = ({ roomCode: rc, token }) => {
+    const handleTicketServed = ({ roomCode: rc, token, ticket }) => {
       if (rc !== roomCode) return;
       setCalledTickets((prev) => prev.filter((t) => t.token !== token));
       setServedCount((c) => c + 1);
+      // Guarda o ticket completo na lista de atendidos
+      if (ticket) {
+        setServedTickets((prev) => [{ ...ticket, servedAt: Date.now() }, ...prev]);
+      } else {
+        // Fallback: se não veio ticket completo, cria entrada mínima
+        setServedTickets((prev) => [{ token, servedAt: Date.now() }, ...prev]);
+      }
     };
 
-    socket.on("queue_update", handleUpdate);
-    socket.on("ticket_called", handleTicketCalled);
-    socket.on("ticket_served", handleTicketServed);
-    return () => {
-      socket.off("queue_update", handleUpdate);
-      socket.off("ticket_called", handleTicketCalled);
-      socket.off("ticket_served", handleTicketServed);
+    const handleTicketRecalled = ({ roomCode: rc, token, ticket }) => {
+      if (rc !== roomCode) return;
+      // Remove da lista de atendidos e adiciona de volta ao Em Atendimento
+      setServedTickets((prev) => prev.filter((t) => t.token !== token));
+      setServedCount((c) => Math.max(0, c - 1));
+      if (ticket) {
+        setCalledTickets((prev) => [
+          ...prev,
+          { ...ticket, name: ticket.name, calledAt: Date.now() },
+        ]);
+      }
     };
-  }, [roomCode]);
+
+    socket.on("queue_update",    handleUpdate);
+    socket.on("ticket_called",   handleTicketCalled);
+    socket.on("ticket_served",   handleTicketServed);
+    socket.on("ticket_recalled", handleTicketRecalled);
+    return () => {
+      socket.off("connect",          joinRoom);
+      socket.off("queue_update",    handleUpdate);
+      socket.off("ticket_called",   handleTicketCalled);
+      socket.off("ticket_served",   handleTicketServed);
+      socket.off("ticket_recalled", handleTicketRecalled);
+    };
+  }, [roomCode, joinRoom]);
 
   // ── Ações ─────────────────────────────────────────────────────
   const callNext = () => {
@@ -85,6 +148,25 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
   const changePriority = (token, priority) =>
     socket.emit("host:priority", { roomCode, token, priority });
 
+  // Readmite atendido de volta à fila
+  const handleReadmit = (served) => {
+    socket.emit("host:readmit", {
+      roomCode,
+      name: served.name,
+      category: served.category,
+      priority: served.priority ?? 1,
+    });
+    setServedTickets((prev) => prev.filter((t) => t.token !== served.token));
+    setServedCount((c) => Math.max(0, c - 1));
+    setSelectedServed(null);
+  };
+
+  // Chama atendido de volta ao atendimento (sem reentrar na fila)
+  const handleRecallServed = (served) => {
+    socket.emit("host:recall_served", { roomCode, token: served.token });
+    setSelectedServed(null);
+  };
+
   const addManual = () => {
     if (!manualForm.name.trim()) return;
     socket.emit("host:add_manual", { roomCode, name: manualForm.name.trim(), category: manualForm.category });
@@ -106,9 +188,23 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
   const nextName  = queue[0]?.name?.split(" ")[0] || "—";
   const formatWait = (mins) => mins === 0 ? "Agora" : `~${mins}min`;
 
-  const categories = Array.isArray(room.categories)
+  const categories = Array.isArray(room?.categories)
     ? room.categories
-    : JSON.parse(room.categories || "[]");
+    : JSON.parse(room?.categories || "[]");
+
+  // Guard: aguarda dados da sala (reload)
+  if (!room || roomLoading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+        <div style={{ fontSize: "28px", fontWeight: 800 }}>
+          fila<span style={{ color: "var(--accent)" }}>.io</span>
+        </div>
+        <div style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid var(--border)", borderTopColor: "var(--accent)", animation: "spin 0.8s linear infinite" }} />
+        <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Carregando sala...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", padding: "16px 20px 40px", maxWidth: "960px", margin: "0 auto" }}>
@@ -271,6 +367,63 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
         </div>
       )}
 
+      {/* ── Atendidos Hoje ── */}
+      {servedTickets.length > 0 && (
+        <div className="card animate-fade" style={{ overflow: "hidden", marginTop: "20px", marginBottom: "20px" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <h3 style={{ fontWeight: 700, fontSize: "15px", display: "flex", alignItems: "center", gap: "8px" }}>
+              ✅ Atendidos Hoje
+            </h3>
+            <span className="tag" style={{ background: "rgba(167,139,250,0.12)", color: "#A78BFA", borderColor: "rgba(167,139,250,0.3)" }}>
+              {servedTickets.length} atendido{servedTickets.length > 1 ? "s" : ""}
+            </span>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  {["Nome", "Categoria", "Atendido às", "Ações"].map((h) => (
+                    <th key={h} className="mono" style={{ padding: "10px 16px", textAlign: "left", fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 500 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {servedTickets.map((t, i) => (
+                  <tr
+                    key={t.token || i}
+                    className="animate-slide"
+                    style={{ borderBottom: "1px solid var(--border)", animationDelay: `${i * 0.03}s`, cursor: "pointer", transition: "background 0.15s" }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-hover)"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                  >
+                    <td style={{ padding: "12px 16px" }}>
+                      <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name || "—"}</span>
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{t.category || "—"}</span>
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <span className="mono" style={{ fontSize: "12px", color: "#A78BFA" }}>
+                        {t.servedAt ? new Date(t.servedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <button
+                        className="btn"
+                        onClick={() => setSelectedServed(t)}
+                        style={{ background: "rgba(167,139,250,0.1)", color: "#A78BFA", border: "1px solid rgba(167,139,250,0.25)", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: 600 }}
+                      >
+                        Ações ▾
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal: Adicionar Manual ── */}
       <Modal open={manualModal} onClose={() => setManualModal(false)}>
         <h3 style={{ fontWeight: 700, marginBottom: "20px", fontSize: "18px" }}>➕ Adicionar Manualmente</h3>
@@ -285,6 +438,79 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
           <button className="btn" onClick={addManual} style={{ flex: 2, padding: "14px", background: "linear-gradient(135deg, var(--accent), #818cf8)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: 800 }}>Adicionar à Fila</button>
         </div>
       </Modal>
+
+      {/* ── Popup: Ações sobre ticket atendido ── */}
+      {selectedServed && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}
+          onClick={(e) => e.target === e.currentTarget && setSelectedServed(null)}
+        >
+          <div className="card animate-fade" style={{ background: "var(--surface)", width: "100%", maxWidth: "400px", padding: "28px", position: "relative" }}>
+            <button onClick={() => setSelectedServed(null)} style={{ position: "absolute", top: "16px", right: "16px", background: "transparent", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-muted)", lineHeight: 1 }}>×</button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px" }}>
+              <div style={{ width: 46, height: 46, background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", flexShrink: 0 }}>✅</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "16px" }}>{selectedServed.name || "—"}</div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                  {selectedServed.category} · atendido às {selectedServed.servedAt ? new Date(selectedServed.servedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                </div>
+              </div>
+            </div>
+
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "20px" }}>O que você deseja fazer com este paciente?</p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {/* Opção 1: Voltar ao atendimento (chamado) */}
+              <button
+                onClick={() => handleRecallServed(selectedServed)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "14px",
+                  padding: "16px 18px", textAlign: "left",
+                  background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
+                  borderRadius: "12px", cursor: "pointer", fontFamily: "inherit",
+                  transition: "all 0.2s", width: "100%",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "rgba(245,158,11,0.12)"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "rgba(245,158,11,0.06)"}
+              >
+                <span style={{ fontSize: "24px" }}>📢</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: "var(--warn)", fontSize: "14px" }}>Chamar de Volta ao Atendimento</div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>Retorna direto ao guichê (sem passar pela fila)</div>
+                </div>
+              </button>
+
+              {/* Opção 2: Voltar à fila */}
+              <button
+                onClick={() => handleReadmit(selectedServed)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "14px",
+                  padding: "16px 18px", textAlign: "left",
+                  background: "var(--accent-glow)", border: "1px solid var(--accent-dim)",
+                  borderRadius: "12px", cursor: "pointer", fontFamily: "inherit",
+                  transition: "all 0.2s", width: "100%",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "rgba(99,102,241,0.12)"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent-glow)"}
+              >
+                <span style={{ fontSize: "24px" }}>🔄</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: "var(--accent)", fontSize: "14px" }}>Recolocar na Fila</div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>Adiciona como novo ticket (categoria: {selectedServed.category})</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setSelectedServed(null)}
+                style={{ padding: "12px", background: "transparent", border: "1px solid var(--border)", borderRadius: "10px", cursor: "pointer", fontFamily: "inherit", color: "var(--text-muted)", fontSize: "13px" }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal: Relatório de Encerramento ── */}
       <Modal open={closeDayModal} onClose={() => {}} maxWidth="500px">
@@ -322,6 +548,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
       </Modal>
     </div>
   );
+
 };
 
 export default QueueManagementScreen;

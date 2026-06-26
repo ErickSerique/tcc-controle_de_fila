@@ -11,12 +11,74 @@
  */
 const { v4: uuidv4 } = require("uuid");
 const { pool } = require("../config/db");
+const redis = require("../config/redis");
 const {
   getCachedQueue,
   cacheQueue,
   getRoom,
   recalcPositions,
 } = require("./roomService");
+
+// ── TMA Dinâmico ─────────────────────────────────────────────────
+
+const DYNAMIC_TMA_KEY = (roomId) => `dynamic_tma:${roomId}`;
+const DYNAMIC_TMA_TTL = 30; // cache por 30 segundos
+
+/**
+ * Calcula o TMA dinâmico baseado nos atendimentos reais da sala.
+ * Consulta tickets com status 'served' que possuem called_at e served_at,
+ * e retorna a média real de duração do atendimento por categoria.
+ *
+ * @param {string} roomId - UUID da sala
+ * @returns {Object|null} - Mapa { category: avgMinutos } ou null se sem dados
+ */
+const getDynamicTma = async (roomId) => {
+  if (!roomId) return null;
+
+  // Tenta cache primeiro
+  try {
+    const cached = await redis.get(DYNAMIC_TMA_KEY(roomId));
+    if (cached) return JSON.parse(cached);
+  } catch {
+    // Redis indisponível — segue para query
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT category,
+              AVG(EXTRACT(EPOCH FROM (served_at - called_at)) / 60) AS avg_minutes
+       FROM tickets
+       WHERE room_id = $1
+         AND status = 'served'
+         AND called_at IS NOT NULL
+         AND served_at IS NOT NULL
+         AND served_at > called_at
+       GROUP BY category
+       HAVING COUNT(*) >= 1`,
+      [roomId]
+    );
+
+    if (rows.length === 0) return null;
+
+    const tmaMap = {};
+    rows.forEach((r) => {
+      tmaMap[r.category] = parseFloat(r.avg_minutes);
+    });
+
+    // Cacheia no Redis
+    try {
+      await redis.setex(DYNAMIC_TMA_KEY(roomId), DYNAMIC_TMA_TTL, JSON.stringify(tmaMap));
+    } catch {
+      // Redis indisponível — não bloqueia
+    }
+
+    console.log(`[queue] TMA dinâmico calculado para room ${roomId}:`, tmaMap);
+    return tmaMap;
+  } catch (err) {
+    console.warn(`[queue] Falha ao calcular TMA dinâmico: ${err.message}`);
+    return null;
+  }
+};
 
 // ── Persistência resiliente ──────────────────────────────────────
 
@@ -157,10 +219,13 @@ const joinQueue = async (roomCode, { name, category, manual = false }) => {
     _orgId: room.org_id, // usado internamente pelo persistTicket
   };
 
+  // Calcula TMA dinâmico para previsões mais precisas
+  const dynamicTma = await getDynamicTma(room.id);
+
   // Atualiza Redis
   const queue = (await getCachedQueue(roomCode)) || [];
   queue.push(ticket);
-  recalcPositions(queue);
+  recalcPositions(queue, dynamicTma);
   await cacheQueue(roomCode, queue);
 
   // Persiste no PostgreSQL (async com retry)
@@ -174,6 +239,7 @@ const joinQueue = async (roomCode, { name, category, manual = false }) => {
  * Remove da fila ativa e atualiza status no banco.
  */
 const callNext = async (roomCode) => {
+  const room = await getRoom(roomCode);
   const queue = (await getCachedQueue(roomCode)) || [];
   if (queue.length === 0) return null;
 
@@ -181,7 +247,9 @@ const callNext = async (roomCode) => {
   next.status = "called";
   next.calledAt = Date.now();
 
-  recalcPositions(queue);
+  // Recalcula com TMA dinâmico (o callNext muda o contexto de espera)
+  const dynamicTma = room ? await getDynamicTma(room.id) : null;
+  recalcPositions(queue, dynamicTma);
   await cacheQueue(roomCode, queue);
 
   // Persiste com retry
@@ -206,13 +274,15 @@ const callNext = async (roomCode) => {
  * Conta como abandono nos relatórios.
  */
 const removeTicket = async (roomCode, token) => {
+  const room = await getRoom(roomCode);
   const queue = (await getCachedQueue(roomCode)) || [];
   const before = queue.length;
   const updated = queue.filter((t) => t.token !== token);
 
   if (updated.length === before) throw new Error("Ticket não encontrado na fila.");
 
-  recalcPositions(updated);
+  const dynamicTma = room ? await getDynamicTma(room.id) : null;
+  recalcPositions(updated, dynamicTma);
   await cacheQueue(roomCode, updated);
 
   resilientPersist(
@@ -230,12 +300,14 @@ const removeTicket = async (roomCode, token) => {
 const changePriority = async (roomCode, token, newPriority) => {
   if (![1, 2, 3].includes(newPriority)) throw new Error("Prioridade inválida. Use 1, 2 ou 3.");
 
+  const room = await getRoom(roomCode);
   const queue = (await getCachedQueue(roomCode)) || [];
   const ticket = queue.find((t) => t.token === token);
   if (!ticket) throw new Error("Ticket não encontrado na fila.");
 
   ticket.priority = newPriority;
-  recalcPositions(queue);
+  const dynamicTma = room ? await getDynamicTma(room.id) : null;
+  recalcPositions(queue, dynamicTma);
   await cacheQueue(roomCode, queue);
 
   resilientPersist(
@@ -277,7 +349,8 @@ const getQueue = async (roomCode) => {
     estimatedWait: t.estimated_wait,
   }));
 
-  recalcPositions(queue);
+  const dynamicTma = await getDynamicTma(room.id);
+  recalcPositions(queue, dynamicTma);
   await cacheQueue(roomCode, queue);
   return queue;
 };
@@ -285,8 +358,16 @@ const getQueue = async (roomCode) => {
 /**
  * Confirma que um ticket chamado foi efetivamente atendido.
  * Transição: called → served (preenche served_at).
+ * Invalida o cache do TMA dinâmico para que o próximo cálculo
+ * de estimativa de espera reflita o novo dado de atendimento.
  */
 const confirmServed = async (token) => {
+  // Busca o room_id antes de atualizar, para invalidar o cache
+  const { rows: ticketRows } = await pool.query(
+    `SELECT room_id FROM tickets WHERE token = $1 AND status = 'called'`,
+    [token]
+  );
+
   const { rowCount } = await pool.query(
     `UPDATE tickets
      SET status = 'served', served_at = NOW()
@@ -294,6 +375,15 @@ const confirmServed = async (token) => {
     [token]
   );
   if (rowCount === 0) throw new Error("Ticket não encontrado ou já finalizado.");
+
+  // Invalida cache do TMA dinâmico para esta sala
+  if (ticketRows[0]?.room_id) {
+    try {
+      await redis.del(DYNAMIC_TMA_KEY(ticketRows[0].room_id));
+    } catch {
+      // Redis indisponível — não bloqueia
+    }
+  }
 };
 
 /**
@@ -301,6 +391,7 @@ const confirmServed = async (token) => {
  * Remove da fila ativa e atualiza status no banco.
  */
 const callSpecific = async (roomCode, token) => {
+  const room = await getRoom(roomCode);
   const queue = (await getCachedQueue(roomCode)) || [];
   const idx = queue.findIndex((t) => t.token === token);
   if (idx === -1) throw new Error("Ticket não encontrado na fila.");
@@ -309,7 +400,8 @@ const callSpecific = async (roomCode, token) => {
   ticket.status = "called";
   ticket.calledAt = Date.now();
 
-  recalcPositions(queue);
+  const dynamicTma = room ? await getDynamicTma(room.id) : null;
+  recalcPositions(queue, dynamicTma);
   await cacheQueue(roomCode, queue);
 
   resilientPersist(
