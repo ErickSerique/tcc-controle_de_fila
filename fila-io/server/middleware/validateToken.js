@@ -1,4 +1,4 @@
-const jwt = require("jsonwebtoken");
+﻿const jwt = require("jsonwebtoken");
 const config = require("../config");
 
 /**
@@ -32,4 +32,8 @@ const signTicketToken = (ticketToken, roomCode) =>
     expiresIn: config.JWT_EXPIRES_IN,
   });
 
-module.exports = { validateTicketToken, signTicketToken };
+module.exports = {
+  validateTicketToken,
+  signTicketToken,
+  signSessionToken: signTicketToken,
+};

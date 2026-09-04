@@ -1,6 +1,6 @@
 const express = require("express");
 const { body, param, validationResult } = require("express-validator");
-const { createRoomLimiter } = require("../middleware/rateLimiter");
+const { createLimiter } = require("../middleware/rateLimiter");
 const { requireOwnerOrAdmin } = require("../middleware/requireStaffRole");
 const {
   createRoom, getRoom, closeDay, getHistory, getHistorySession,
@@ -24,7 +24,7 @@ const actorFromHeaders = (req) => ({
 // ── POST /api/rooms — Criar sala ───────────────────────────────
 router.post(
   "/",
-  createRoomLimiter,
+  createLimiter,
   [
     body("name").trim().isLength({ min: 3, max: 80 }).escape(),
     body("categories").isArray({ min: 1, max: 10 }),

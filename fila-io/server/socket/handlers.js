@@ -1,88 +1,73 @@
+﻿/**
+ * socket/handlers.js — fila.io v2.0
+ *
+ * Registra todos os manipuladores de eventos em tempo real via Socket.io.
+ */
 const {
-  callNext, callSpecific, confirmServed, removeTicket,
-  changePriority, getQueue, joinQueue, leaveQueue, recallTicket, getArchive,
+  joinQueue,
+  callNext,
+  callSpecific,
+  confirmServed,
+  removeTicket,
+  leaveQueue,
+  recallTicket,
+  changePriority,
+  getQueue,
+  getArchive,
 } = require("../services/queueService");
 const { roomExists } = require("../services/roomService");
 
-/**
- * handlers.js — todos os eventos Socket.io em tempo real.
- *
- * ┌──────────────────────────────────────────────────────────────────┐
- * │  Eventos recebidos do HOST                                       │
- * │  host:join         { roomCode, actorName, actorRole }            │
- * │  host:call_next    { roomCode, counter }                         │
- * │  host:call_specific{ roomCode, token, counter }                  │
- * │  host:confirm_served { roomCode, token }                         │
- * │  host:remove       { roomCode, token }                           │
- * │  host:priority     { roomCode, token, priority }                 │
- * │  host:add_manual   { roomCode, name, category, customData }      │
- * │  host:recall       { roomCode, token, mode, counter }            │
- * ├──────────────────────────────────────────────────────────────────┤
- * │  Eventos recebidos do CLIENTE                                    │
- * │  client:join       { roomCode, token }                           │
- * │  client:leave      { roomCode, token }                           │
- * ├──────────────────────────────────────────────────────────────────┤
- * │  Eventos recebidos do MONITOR (TV externa, somente leitura)      │
- * │  monitor:join      { roomCode }                                  │
- * ├──────────────────────────────────────────────────────────────────┤
- * │  Eventos emitidos para a SALA (broadcast)                        │
- * │  queue_update      { roomCode, queue }                           │
- * │  archive_update    { roomCode, archive }                         │
- * │  ticket_called     { roomCode, token, ticket }                   │
- * │  ticket_left       { roomCode, token }                           │
- * │  queue_empty       { roomCode }                                  │
- * └──────────────────────────────────────────────────────────────────┘
- *
- * A identidade do host (actorName/actorRole) é guardada em socket.data.actor
- * e usada para toda a auditoria (logService) das ações seguintes nesse socket.
- */
 const registerSocketHandlers = (io) => {
   io.on("connection", (socket) => {
     console.log(`[ws] +connect  ${socket.id}`);
 
     // ── HOST: entra no canal da sala, identificando-se ────────────
     socket.on("host:join", ({ roomCode, actorName, actorRole }) => {
-      if (!roomExists(roomCode)) {
-        socket.emit("error", { message: "Sala não encontrada." });
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) {
+        socket.emit("error", { message: "Sala não encontrada ou inativa." });
         return;
       }
-      socket.join(roomCode);
+      socket.join(code);
       socket.data.actor = { name: actorName || "Operador", role: actorRole || "operator" };
-      socket.data.roomCode = roomCode;
-      console.log(`[ws] host ${socket.id} (${socket.data.actor.name}/${socket.data.actor.role}) → room ${roomCode}`);
+      socket.data.roomCode = code;
+      console.log(`[ws] host ${socket.id} (${socket.data.actor.name}/${socket.data.actor.role}) → room ${code}`);
 
-      socket.emit("queue_update", { roomCode, queue: getQueue(roomCode) });
-      socket.emit("archive_update", { roomCode, archive: getArchive(roomCode) });
+      socket.emit("queue_update", { roomCode: code, queue: getQueue(code) });
+      socket.emit("archive_update", { roomCode: code, archive: getArchive(code) });
     });
 
     // ── MONITOR (TV externa): apenas assiste, não realiza ações ───
     socket.on("monitor:join", ({ roomCode }) => {
-      if (!roomExists(roomCode)) return;
-      socket.join(roomCode);
-      socket.emit("queue_update", { roomCode, queue: getQueue(roomCode) });
-      socket.emit("archive_update", { roomCode, archive: getArchive(roomCode) });
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) return;
+      socket.join(code);
+      socket.emit("queue_update", { roomCode: code, queue: getQueue(code) });
+      socket.emit("archive_update", { roomCode: code, archive: getArchive(code) });
     });
 
     // ── CLIENTE: entra no canal com token de ticket ────────────────
     socket.on("client:join", ({ roomCode, token }) => {
-      if (!roomExists(roomCode)) return;
-      socket.join(roomCode);
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) return;
+      socket.join(code);
       socket.data.token = token;
-      socket.data.roomCode = roomCode;
+      socket.data.roomCode = code;
 
-      const queue = getQueue(roomCode);
+      const queue = getQueue(code);
       const myTicket = queue.find((t) => t.token === token);
       if (myTicket) socket.emit("ticket_status", { ticket: myTicket });
     });
 
     // ── CLIENTE: sai voluntariamente da fila ────────────────────────
     socket.on("client:leave", ({ roomCode, token }) => {
-      if (!roomExists(roomCode)) return;
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) return;
       try {
-        const updated = leaveQueue(roomCode, token);
-        io.to(roomCode).emit("queue_update", { roomCode, queue: updated });
-        io.to(roomCode).emit("archive_update", { roomCode, archive: getArchive(roomCode) });
-        io.to(roomCode).emit("ticket_left", { roomCode, token });
+        const updated = leaveQueue(code, token);
+        io.to(code).emit("queue_update", { roomCode: code, queue: updated });
+        io.to(code).emit("archive_update", { roomCode: code, archive: getArchive(code) });
+        io.to(code).emit("ticket_left", { roomCode: code, token });
       } catch (err) {
         socket.emit("error", { message: err.message });
       }
@@ -90,25 +75,35 @@ const registerSocketHandlers = (io) => {
 
     // ── HOST: chama o próximo ───────────────────────────────────────
     socket.on("host:call_next", ({ roomCode, counter }) => {
-      if (!roomExists(roomCode)) return;
-      const called = callNext(roomCode, { counter, actor: socket.data.actor });
-      if (!called) {
-        socket.emit("queue_empty", { roomCode });
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) {
+        socket.emit("error", { message: "Sala não encontrada ou inativa." });
         return;
       }
-      io.to(roomCode).emit("queue_update", { roomCode, queue: getQueue(roomCode) });
-      io.to(roomCode).emit("archive_update", { roomCode, archive: getArchive(roomCode) });
-      io.to(roomCode).emit("ticket_called", { roomCode, token: called.token, ticket: called });
+      socket.join(code);
+      const called = callNext(code, { counter, actor: socket.data.actor });
+      if (!called) {
+        socket.emit("queue_empty", { roomCode: code });
+        return;
+      }
+      io.to(code).emit("queue_update", { roomCode: code, queue: getQueue(code) });
+      io.to(code).emit("archive_update", { roomCode: code, archive: getArchive(code) });
+      io.to(code).emit("ticket_called", { roomCode: code, token: called.token, ticket: called });
     });
 
     // ── HOST: chama ticket específico (fora de ordem) ───────────────
     socket.on("host:call_specific", ({ roomCode, token, counter }) => {
-      if (!roomExists(roomCode)) return;
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) {
+        socket.emit("error", { message: "Sala não encontrada ou inativa." });
+        return;
+      }
+      socket.join(code);
       try {
-        const called = callSpecific(roomCode, token, { counter, actor: socket.data.actor });
-        io.to(roomCode).emit("queue_update", { roomCode, queue: getQueue(roomCode) });
-        io.to(roomCode).emit("archive_update", { roomCode, archive: getArchive(roomCode) });
-        io.to(roomCode).emit("ticket_called", { roomCode, token: called.token, ticket: called });
+        const called = callSpecific(code, token, { counter, actor: socket.data.actor });
+        io.to(code).emit("queue_update", { roomCode: code, queue: getQueue(code) });
+        io.to(code).emit("archive_update", { roomCode: code, archive: getArchive(code) });
+        io.to(code).emit("ticket_called", { roomCode: code, token: called.token, ticket: called });
       } catch (err) {
         socket.emit("error", { message: err.message });
       }
@@ -116,10 +111,15 @@ const registerSocketHandlers = (io) => {
 
     // ── HOST: confirma atendimento concluído no guichê ──────────────
     socket.on("host:confirm_served", ({ roomCode, token }) => {
-      if (!roomExists(roomCode)) return;
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) {
+        socket.emit("error", { message: "Sala não encontrada ou inativa." });
+        return;
+      }
+      socket.join(code);
       try {
-        confirmServed(roomCode, token, { actor: socket.data.actor });
-        io.to(roomCode).emit("archive_update", { roomCode, archive: getArchive(roomCode) });
+        confirmServed(code, token, { actor: socket.data.actor });
+        io.to(code).emit("archive_update", { roomCode: code, archive: getArchive(code) });
       } catch (err) {
         socket.emit("error", { message: err.message });
       }
@@ -127,11 +127,16 @@ const registerSocketHandlers = (io) => {
 
     // ── HOST: remove ticket da fila ──────────────────────────────────
     socket.on("host:remove", ({ roomCode, token }) => {
-      if (!roomExists(roomCode)) return;
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) {
+        socket.emit("error", { message: "Sala não encontrada ou inativa." });
+        return;
+      }
+      socket.join(code);
       try {
-        const updated = removeTicket(roomCode, token, { actor: socket.data.actor });
-        io.to(roomCode).emit("queue_update", { roomCode, queue: updated });
-        io.to(roomCode).emit("archive_update", { roomCode, archive: getArchive(roomCode) });
+        const updated = removeTicket(code, token, { actor: socket.data.actor });
+        io.to(code).emit("queue_update", { roomCode: code, queue: updated });
+        io.to(code).emit("archive_update", { roomCode: code, archive: getArchive(code) });
       } catch (err) {
         socket.emit("error", { message: err.message });
       }
@@ -139,10 +144,15 @@ const registerSocketHandlers = (io) => {
 
     // ── HOST: altera prioridade de um ticket ─────────────────────────
     socket.on("host:priority", ({ roomCode, token, priority }) => {
-      if (!roomExists(roomCode)) return;
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) {
+        socket.emit("error", { message: "Sala não encontrada ou inativa." });
+        return;
+      }
+      socket.join(code);
       try {
-        const updated = changePriority(roomCode, token, priority);
-        io.to(roomCode).emit("queue_update", { roomCode, queue: updated });
+        const updated = changePriority(code, token, priority);
+        io.to(code).emit("queue_update", { roomCode: code, queue: updated });
       } catch (err) {
         socket.emit("error", { message: err.message });
       }
@@ -150,10 +160,17 @@ const registerSocketHandlers = (io) => {
 
     // ── HOST: adiciona cliente manualmente (walk-in sem smartphone) ──
     socket.on("host:add_manual", ({ roomCode, name, category, customData }) => {
-      if (!roomExists(roomCode)) return;
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) {
+        socket.emit("error", { message: "Sala não encontrada ou inativa." });
+        return;
+      }
+      socket.join(code);
       try {
-        joinQueue(roomCode, { name, category, manual: true, customData: customData || {} });
-        io.to(roomCode).emit("queue_update", { roomCode, queue: getQueue(roomCode) });
+        joinQueue(code, { name, category, manual: true, customData: customData || {} });
+        const currentQueue = getQueue(code);
+        io.to(code).emit("queue_update", { roomCode: code, queue: currentQueue });
+        socket.emit("queue_update", { roomCode: code, queue: currentQueue });
       } catch (err) {
         socket.emit("error", { message: err.message });
       }
@@ -161,15 +178,20 @@ const registerSocketHandlers = (io) => {
 
     // ── HOST: recall unificado — chama de volta um ticket já arquivado ──
     socket.on("host:recall", ({ roomCode, token, mode, counter }) => {
-      if (!roomExists(roomCode)) return;
+      const code = roomCode?.toString().trim().toUpperCase();
+      if (!roomExists(code)) {
+        socket.emit("error", { message: "Sala não encontrada ou inativa." });
+        return;
+      }
+      socket.join(code);
       try {
-        recallTicket(roomCode, token, { mode, counter, actor: socket.data.actor });
-        io.to(roomCode).emit("queue_update", { roomCode, queue: getQueue(roomCode) });
-        io.to(roomCode).emit("archive_update", { roomCode, archive: getArchive(roomCode) });
+        recallTicket(code, token, { mode, counter, actor: socket.data.actor });
+        io.to(code).emit("queue_update", { roomCode: code, queue: getQueue(code) });
+        io.to(code).emit("archive_update", { roomCode: code, archive: getArchive(code) });
 
         if (mode === "counter") {
-          const ticket = getArchive(roomCode).find((t) => t.token === token);
-          io.to(roomCode).emit("ticket_called", { roomCode, token, ticket });
+          const ticket = getArchive(code).find((t) => t.token === token);
+          io.to(code).emit("ticket_called", { roomCode: code, token, ticket });
         }
       } catch (err) {
         socket.emit("error", { message: err.message });

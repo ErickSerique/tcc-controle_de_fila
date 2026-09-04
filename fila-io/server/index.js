@@ -1,4 +1,4 @@
-/**
+﻿/**
  * server/index.js — fila.io v2.0
  *
  * Ponto de entrada do servidor.
@@ -27,10 +27,27 @@ const registerSocketHandlers = require("./socket/handlers");
 const app = express();
 const httpServer = http.createServer(app);
 
-// ── Socket.io ─────────────────────────────────────────────────────
+// ── CORS & Socket.io ─────────────────────────────────────────────
+const isDev = process.env.NODE_ENV !== "production";
+const allowedOrigins = [
+  config.CLIENT_URL,
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+].filter(Boolean);
+
+const checkCorsOrigin = (origin, callback) => {
+  if (!origin || allowedOrigins.includes(origin) || (isDev && origin.startsWith("http://localhost:"))) {
+    callback(null, true);
+  } else {
+    callback(new Error("Not allowed by CORS"));
+  }
+};
+
 const io = new Server(httpServer, {
   cors: {
-    origin: config.CLIENT_URL,
+    origin: isDev ? checkCorsOrigin : config.CLIENT_URL,
     methods: ["GET", "POST"],
   },
   pingTimeout: 10_000,
@@ -41,7 +58,7 @@ app.set("io", io);
 
 // ── Middleware global ──────────────────────────────────────────────
 app.use(helmet());
-app.use(cors({ origin: config.CLIENT_URL, credentials: true }));
+app.use(cors({ origin: isDev ? checkCorsOrigin : config.CLIENT_URL, credentials: true }));
 app.use(express.json({ limit: "10kb" }));
 app.use(rateLimiter);
 
@@ -112,3 +129,4 @@ httpServer.listen(config.PORT, () => {
 });
 
 module.exports = { app, io };
+

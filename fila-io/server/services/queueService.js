@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require("uuid");
+﻿const { v4: uuidv4 } = require("uuid");
 const { rooms, recalcPositions } = require("./roomService");
 const { logAction } = require("./logService");
 
@@ -30,7 +30,7 @@ const pushTimeline = (ticket, status) => {
  *   customData: { [fieldId]: valor } — respostas aos campos personalizados
  */
 const joinQueue = (roomCode, { name, category, manual = false, customData = {} }) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room || !room.active) throw new Error("Sala inativa ou inexistente.");
 
   const catConfig = room.categories.find((c) => c.name === category);
@@ -78,7 +78,7 @@ const joinQueue = (roomCode, { name, category, manual = false, customData = {} }
 
 /** Chama o próximo ticket de maior prioridade e o direciona a um guichê. */
 const callNext = (roomCode, { counter, actor } = {}) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room || room.queue.length === 0) return null;
 
   const next = room.queue.shift();
@@ -99,7 +99,7 @@ const callNext = (roomCode, { counter, actor } = {}) => {
 
 /** Chama um ticket específico (fora de ordem) e o direciona a um guichê. */
 const callSpecific = (roomCode, token, { counter, actor } = {}) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room) throw new Error("Sala não encontrada.");
 
   const idx = room.queue.findIndex((t) => t.token === token);
@@ -123,7 +123,7 @@ const callSpecific = (roomCode, token, { counter, actor } = {}) => {
 
 /** Confirma que o ticket chamado foi efetivamente atendido. */
 const confirmServed = (roomCode, token, { actor } = {}) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room) throw new Error("Sala não encontrada.");
 
   const ticket = room.archive.find((t) => t.token === token && t.status === "called");
@@ -138,7 +138,7 @@ const confirmServed = (roomCode, token, { actor } = {}) => {
 
 /** HOST remove um ticket da fila (ex: no-show). Move para o arquivo do dia. */
 const removeTicket = (roomCode, token, { actor } = {}) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room) throw new Error("Sala não encontrada.");
 
   const idx = room.queue.findIndex((t) => t.token === token);
@@ -157,7 +157,7 @@ const removeTicket = (roomCode, token, { actor } = {}) => {
 
 /** CLIENTE sai voluntariamente da fila pelo próprio celular. */
 const leaveQueue = (roomCode, token) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room) throw new Error("Sala não encontrada.");
 
   const idx = room.queue.findIndex((t) => t.token === token);
@@ -184,7 +184,7 @@ const leaveQueue = (roomCode, token) => {
  *                        prioridade original da categoria do ticket
  */
 const recallTicket = (roomCode, token, { mode, counter, actor } = {}) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room) throw new Error("Sala não encontrada.");
 
   const ticket = room.archive.find((t) => t.token === token);
@@ -235,7 +235,7 @@ const recallTicket = (roomCode, token, { mode, counter, actor } = {}) => {
 
 /** Altera o peso de prioridade de um ticket já na fila. */
 const changePriority = (roomCode, token, newPriority) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room) throw new Error("Sala não encontrada.");
   if (![1, 2, 3].includes(newPriority)) throw new Error("Prioridade inválida. Use 1, 2 ou 3.");
 
@@ -249,14 +249,14 @@ const changePriority = (roomCode, token, newPriority) => {
 
 /** Retorna snapshot atual da fila de espera de uma sala. */
 const getQueue = (roomCode) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room) throw new Error("Sala não encontrada.");
   return room.queue;
 };
 
 /** Retorna o arquivo do dia — todos os tickets que já saíram da fila ativa. */
 const getArchive = (roomCode) => {
-  const room = rooms.get(roomCode);
+  const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room) throw new Error("Sala não encontrada.");
   return room.archive;
 };
@@ -273,3 +273,4 @@ module.exports = {
   getQueue,
   getArchive,
 };
+

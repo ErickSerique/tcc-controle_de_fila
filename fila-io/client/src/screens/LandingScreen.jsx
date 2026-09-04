@@ -1,7 +1,7 @@
-/**
+﻿/**
  * screens/LandingScreen.jsx
  *
- * Tela inicial — agora mostra org ativa e opção de sair.
+ * Tela inicial — agora mostra org ativa e opção de entrar/sair.
  */
 import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
@@ -56,8 +56,6 @@ const LandingScreen = ({ onNavigate }) => {
     finally { setIsSubmitting(false); setDeleteConfirm(false); }
   };
 
-  const canManageHost = ["owner", "admin", "operator"].includes(activeOrg?.role);
-
   const cards = [
     {
       role: "host",
@@ -99,100 +97,121 @@ const LandingScreen = ({ onNavigate }) => {
         background: "radial-gradient(ellipse 80% 60% at 50% 50%, var(--accent-glow) 0%, transparent 70%)",
       }} />
 
-      {/* Barra de usuário */}
-      {user && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0,
-          background: "var(--surface)", borderBottom: "1px solid var(--border)",
-          padding: "10px 20px", display: "flex", alignItems: "center",
-          justifyContent: "space-between", zIndex: 50,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <span style={{ fontSize: "15px", fontWeight: 700 }}>
-              fila<span style={{ color: "var(--accent)" }}>.io</span>
-            </span>
+      {/* Barra de usuário / Autenticação no topo */}
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0,
+        background: "var(--surface)", borderBottom: "1px solid var(--border)",
+        padding: "10px 20px", display: "flex", alignItems: "center",
+        justifyContent: "space-between", zIndex: 50,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <span style={{ fontSize: "15px", fontWeight: 700 }}>
+            fila<span style={{ color: "var(--accent)" }}>.io</span>
+          </span>
+          {user && (
             <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
               Olá, {user.email}
             </span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* Org switcher */}
-            <div style={{ position: "relative" }}>
-              <button
-                onClick={() => setShowOrgMenu(!showOrgMenu)}
-                className="btn"
-                style={{ padding: "6px 12px", fontSize: "13px", gap: "6px" }}
-              >
-                <span style={{ maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {activeOrg?.name ?? "Sem organização"}
-                </span>
-                <span className="tag" style={{ fontSize: "10px" }}>{activeOrg?.role}</span>
-                <span style={{ color: "var(--text-muted)" }}>▾</span>
-              </button>
-
-              {showOrgMenu && (
-                <div style={{
-                  position: "absolute", top: "calc(100% + 6px)", right: 0,
-                  background: "var(--surface)", border: "1px solid var(--border)",
-                  borderRadius: "10px", boxShadow: "var(--shadow-lg)",
-                  minWidth: "220px", zIndex: 100, overflow: "hidden",
-                }}>
-                  {orgs.map((org) => (
-                    <button
-                      key={org.id}
-                      onClick={() => { switchOrg(org); setShowOrgMenu(false); }}
-                      style={{
-                        display: "block", width: "100%", padding: "12px 16px",
-                        textAlign: "left", background: org.id === activeOrg?.id ? "var(--accent-glow)" : "transparent",
-                        border: "none", borderBottom: "1px solid var(--border)",
-                        cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{org.name}</div>
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{org.role}</div>
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => { setShowOrgMenu(false); setShowCreateModal(true); }}
-                    style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px" }}>
-                    ➕ Nova Organização
-                  </button>
-                  {activeOrg && ["owner", "admin"].includes(activeOrg.role) && (
-                    <button
-                      onClick={() => { setEditOrgName(activeOrg.name); setShowOrgMenu(false); setShowSettingsModal(true); }}
-                      style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px" }}>
-                      ⚙️ Configurações
-                    </button>
-                  )}
-                  <button
-                    onClick={() => { onNavigate("members"); setShowOrgMenu(false); }}
-                    style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--accent)", fontSize: "13px" }}>
-                    👥 Gerenciar Membros
-                  </button>
-                  <button
-                    onClick={() => { toggleTheme(); setShowOrgMenu(false); }}
-                    style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", borderTop: "1px solid var(--border)", cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px" }}>
-                    {theme === 'light' ? '🌙 Modo Escuro' : '☀️ Modo Claro'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={signOut}
-              className="btn"
-              style={{ fontSize: "12px", padding: "6px 12px", color: "var(--text-muted)" }}>
-              Sair
-            </button>
-          </div>
+          )}
         </div>
-      )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {/* Alternador de tema */}
+          <button
+            onClick={toggleTheme}
+            className="btn"
+            style={{ fontSize: "13px", padding: "6px 12px" }}
+            title="Alternar Tema"
+          >
+            {theme === 'light' ? '🌙 Modo Escuro' : '☀️ Modo Claro'}
+          </button>
+
+          {user ? (
+            <>
+              {/* Org switcher */}
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowOrgMenu(!showOrgMenu)}
+                  className="btn"
+                  style={{ padding: "6px 12px", fontSize: "13px", gap: "6px" }}
+                >
+                  <span style={{ maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {activeOrg?.name ?? "Sem organização"}
+                  </span>
+                  <span className="tag" style={{ fontSize: "10px" }}>{activeOrg?.role}</span>
+                  <span style={{ color: "var(--text-muted)" }}>▾</span>
+                </button>
+
+                {showOrgMenu && (
+                  <div style={{
+                    position: "absolute", top: "calc(100% + 6px)", right: 0,
+                    background: "var(--surface)", border: "1px solid var(--border)",
+                    borderRadius: "10px", boxShadow: "var(--shadow-lg)",
+                    minWidth: "220px", zIndex: 100, overflow: "hidden",
+                  }}>
+                    {orgs.map((org) => (
+                      <button
+                        key={org.id}
+                        onClick={() => { switchOrg(org); setShowOrgMenu(false); }}
+                        style={{
+                          display: "block", width: "100%", padding: "12px 16px",
+                          textAlign: "left", background: org.id === activeOrg?.id ? "var(--accent-glow)" : "transparent",
+                          border: "none", borderBottom: "1px solid var(--border)",
+                          cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px",
+                        }}
+                      >
+                        <div style={{ fontWeight: 600 }}>{org.name}</div>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{org.role}</div>
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => { setShowOrgMenu(false); setShowCreateModal(true); }}
+                      style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px" }}>
+                      ➕ Nova Organização
+                    </button>
+                    {activeOrg && ["owner", "admin"].includes(activeOrg.role) && (
+                      <button
+                        onClick={() => { setEditOrgName(activeOrg.name); setShowOrgMenu(false); setShowSettingsModal(true); }}
+                        style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px" }}>
+                        ⚙️ Configurações
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { onNavigate("members"); setShowOrgMenu(false); }}
+                      style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--accent)", fontSize: "13px" }}>
+                      👥 Gerenciar Membros
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={signOut}
+                className="btn"
+                style={{ fontSize: "12px", padding: "6px 12px", color: "var(--text-muted)" }}>
+                Sair
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => onNavigate("auth")}
+              className="btn"
+              style={{
+                fontSize: "13px", padding: "6px 16px",
+                background: "var(--accent)", color: "#fff",
+                fontWeight: 600, borderRadius: "8px"
+              }}
+            >
+              Entrar / Cadastrar
+            </button>
+          )}
+        </div>
+      </div>
 
       <div className="animate-fade" style={{
         position: "relative", zIndex: 1,
         textAlign: "center", width: "100%", maxWidth: "460px",
-        marginTop: user ? "60px" : "0",
+        marginTop: "60px",
       }}>
         {/* Logo */}
         <div style={{ marginBottom: "48px" }}>
@@ -220,7 +239,7 @@ const LandingScreen = ({ onNavigate }) => {
               className="btn card"
               onMouseEnter={() => setHovered(c.role)}
               onMouseLeave={() => setHovered(null)}
-              onClick={() => onNavigate(c.target)}
+              onClick={() => onNavigate(c.requiresAuth && !user ? "auth" : c.target)}
               style={{
                 padding: "26px 22px", textAlign: "left",
                 display: "flex", alignItems: "center", gap: "20px",

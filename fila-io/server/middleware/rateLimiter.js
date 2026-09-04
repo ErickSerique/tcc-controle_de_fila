@@ -29,4 +29,5 @@ const joinQueueLimiter = rateLimit({
   message: { error: "Muitas tentativas de entrar na fila. Aguarde 1 minuto." },
 });
 
-module.exports = { rateLimiter, createLimiter, joinQueueLimiter };
+const createRoomLimiter = createLimiter;
+module.exports = { rateLimiter, createLimiter, createRoomLimiter, joinQueueLimiter };

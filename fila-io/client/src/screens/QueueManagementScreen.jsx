@@ -56,10 +56,21 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   // ── Socket ──────────────────────────────────────────────────
   useEffect(() => {
-    socket.emit("host:join", { roomCode, actorName: staff.name, actorRole: staff.role });
+    const joinRoom = () => {
+      socket.emit("host:join", { roomCode, actorName: staff.name, actorRole: staff.role });
+    };
 
-    const handleQueue = ({ roomCode: rc, queue: q }) => { if (rc === roomCode) setQueue([...q]); };
-    const handleArchive = ({ roomCode: rc, archive: a }) => { if (rc === roomCode) setArchive([...a]); };
+    if (socket.connected) {
+      joinRoom();
+    }
+    socket.on("connect", joinRoom);
+
+    const handleQueue = ({ roomCode: rc, queue: q }) => {
+      if (rc?.toUpperCase() === roomCode?.toUpperCase()) setQueue([...q]);
+    };
+    const handleArchive = ({ roomCode: rc, archive: a }) => {
+      if (rc?.toUpperCase() === roomCode?.toUpperCase()) setArchive([...a]);
+    };
     const handleSocketError = ({ message }) => setError(message);
 
     socket.on("queue_update", handleQueue);
@@ -67,6 +78,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
     socket.on("error", handleSocketError);
 
     return () => {
+      socket.off("connect", joinRoom);
       socket.off("queue_update", handleQueue);
       socket.off("archive_update", handleArchive);
       socket.off("error", handleSocketError);

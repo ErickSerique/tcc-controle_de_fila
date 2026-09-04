@@ -20,10 +20,17 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
   const prevPositionRef = useRef(initialTicket.position);
 
   useEffect(() => {
-    socket.emit("client:join", { roomCode: room.code, token: initialTicket.token });
+    const joinRoom = () => {
+      socket.emit("client:join", { roomCode: room.code, token: initialTicket.token });
+    };
+
+    if (socket.connected) {
+      joinRoom();
+    }
+    socket.on("connect", joinRoom);
 
     const handleQueueUpdate = ({ roomCode, queue }) => {
-      if (roomCode !== room.code) return;
+      if (roomCode?.toUpperCase() !== room.code?.toUpperCase()) return;
       const me = queue.find((t) => t.token === initialTicket.token);
       if (!me) return;
 
@@ -51,6 +58,7 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
     socket.on("ticket_called", handleTicketCalled);
 
     return () => {
+      socket.off("connect", joinRoom);
       socket.off("queue_update", handleQueueUpdate);
       socket.off("ticket_called", handleTicketCalled);
     };
