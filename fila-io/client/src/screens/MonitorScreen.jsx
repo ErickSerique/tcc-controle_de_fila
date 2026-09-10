@@ -21,7 +21,12 @@ const MonitorScreen = ({ roomCode }) => {
       .then((data) => !data.error && setRoom(data))
       .catch(() => {});
 
-    socket.emit("monitor:join", { roomCode });
+    // Reenvia o "join" sempre que o socket conectar — incluindo reconexões após
+    // queda de rede, não só na primeira montagem. Sem isso, o monitor fica
+    // "mudo" depois de qualquer instabilidade de conexão até um F5 manual.
+    const joinRoom = () => socket.emit("monitor:join", { roomCode });
+    if (socket.connected) joinRoom();
+    socket.on("connect", joinRoom);
 
     const handleQueue = ({ roomCode: rc, queue: q }) => { if (rc === roomCode) setQueue(q); };
     const handleArchive = ({ roomCode: rc, archive: a }) => { if (rc === roomCode) setArchive(a); };
@@ -31,6 +36,7 @@ const MonitorScreen = ({ roomCode }) => {
     const clock = setInterval(() => setNow(new Date()), 1000);
 
     return () => {
+      socket.off("connect", joinRoom);
       socket.off("queue_update", handleQueue);
       socket.off("archive_update", handleArchive);
       clearInterval(clock);

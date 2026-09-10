@@ -54,8 +54,17 @@ const registerSocketHandlers = (io) => {
       socket.data.token = token;
       socket.data.roomCode = code;
 
+      // Procura primeiro na fila ativa (aguardando) e, se não achar, no
+      // arquivo do dia (chamado/atendido/removido/saiu). Sem isso, um
+      // cliente que reconecta (ex: F5) depois de já ter sido chamado
+      // nunca recebe seu status real, porque nesse ponto o ticket já
+      // saiu de `queue` e só existe em `archive`.
       const queue = getQueue(code);
-      const myTicket = queue.find((t) => t.token === token);
+      let myTicket = queue.find((t) => t.token === token);
+      if (!myTicket) {
+        const archive = getArchive(code);
+        myTicket = archive.find((t) => t.token === token);
+      }
       if (myTicket) socket.emit("ticket_status", { ticket: myTicket });
     });
 

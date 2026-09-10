@@ -13,7 +13,7 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
   const [ticket, setTicket] = useState(initialTicket);
   const [isNext, setIsNext] = useState(initialTicket.position === 1);
   const [isCalled, setIsCalled] = useState(false);
-  const [hasLeft, setHasLeft] = useState(false);
+  const [terminalStatus, setTerminalStatus] = useState(null); // null | "served" | "removed_by_host" | "left_voluntarily"
   const [shaking, setShaking] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [aheadInCategory, setAheadInCategory] = useState(0);
@@ -54,19 +54,49 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
       setTimeout(() => setShaking(false), 600);
     };
 
+    // Resposta ao "client:join": o servidor manda o status REAL do ticket,
+    // buscando tanto na fila ativa quanto no arquivo do dia. É o que permite
+    // restaurar a tela corretamente após uma reconexão/F5 — inclusive quando
+    // o ticket já foi chamado, atendido, removido ou saiu voluntariamente,
+    // casos em que ele não está mais em `queue` e por isso não apareceria
+    // em nenhum `queue_update` normal.
+    const handleTicketStatus = ({ ticket: statusTicket }) => {
+      if (!statusTicket) return;
+
+      if (statusTicket.status === "called") {
+        setTicket((prev) => ({ ...prev, ...statusTicket }));
+        setIsCalled(true);
+        return;
+      }
+
+      if (["served", "removed_by_host", "left_voluntarily"].includes(statusTicket.status)) {
+        setTerminalStatus(statusTicket.status);
+        return;
+      }
+
+      // status === "waiting" — restaura a posição real (não a congelada no sessionStorage)
+      prevPositionRef.current = statusTicket.position;
+      const ahead = statusTicket.position ? statusTicket.position - 1 : 0;
+      setAheadInCategory(ahead);
+      setTicket(statusTicket);
+      setIsNext(statusTicket.position === 1);
+    };
+
     socket.on("queue_update", handleQueueUpdate);
     socket.on("ticket_called", handleTicketCalled);
+    socket.on("ticket_status", handleTicketStatus);
 
     return () => {
       socket.off("connect", joinRoom);
       socket.off("queue_update", handleQueueUpdate);
       socket.off("ticket_called", handleTicketCalled);
+      socket.off("ticket_status", handleTicketStatus);
     };
   }, [initialTicket.token, room.code]);
 
   const confirmLeaveQueue = () => {
     socket.emit("client:leave", { roomCode: room.code, token: initialTicket.token });
-    setHasLeft(true);
+    setTerminalStatus("left_voluntarily");
   };
 
   const formatWait = (mins) => {
@@ -79,15 +109,32 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
 
   const ticketCode = initialTicket.token.split("-").slice(-1)[0].toUpperCase();
 
-  // ── Saiu da fila voluntariamente ────────────────────────────────
-  if (hasLeft) {
+  const TERMINAL_INFO = {
+    served: {
+      icon: "✅",
+      title: "Atendimento concluído",
+      message: `Sua senha #${ticketCode} já foi atendida. Obrigado!`,
+    },
+    removed_by_host: {
+      icon: "❌",
+      title: "Você foi removido da fila",
+      message: `Sua senha #${ticketCode} foi removida pelo atendente.`,
+    },
+    left_voluntarily: {
+      icon: "👋",
+      title: "Você saiu da fila",
+      message: `Sua senha #${ticketCode} foi cancelada.`,
+    },
+  };
+
+  // ── Estado terminal (atendido / removido / saiu voluntariamente) ─
+  if (terminalStatus) {
+    const info = TERMINAL_INFO[terminalStatus];
     return (
       <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", textAlign: "center" }}>
-        <div style={{ fontSize: "64px", marginBottom: "20px" }}>👋</div>
-        <h2 style={{ fontSize: "24px", fontWeight: 800, marginBottom: "8px" }}>Você saiu da fila</h2>
-        <p style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "32px" }}>
-          Sua senha <strong className="mono" style={{ color: "var(--accent)" }}>#{ticketCode}</strong> foi cancelada.
-        </p>
+        <div style={{ fontSize: "64px", marginBottom: "20px" }}>{info.icon}</div>
+        <h2 style={{ fontSize: "24px", fontWeight: 800, marginBottom: "8px" }}>{info.title}</h2>
+        <p style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "32px" }}>{info.message}</p>
         <button className="btn" onClick={onBack} style={{ padding: "14px 32px", background: "linear-gradient(135deg, var(--accent), #34d399)", color: "#022c22", borderRadius: "12px", fontSize: "15px", fontWeight: 700 }}>
           Voltar ao Início
         </button>
