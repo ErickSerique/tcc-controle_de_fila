@@ -6,11 +6,11 @@
  *   signup    → cadastro com nome
  *   magic     → magic link (sem senha)
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 
 const AuthScreen = ({ onBack }) => {
-  const { signInWithEmail, signUpWithEmail, signInWithMagicLink, authError, setAuthError } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithMagicLink, authError, setAuthError, user } = useAuth();
 
   const [mode,     setMode]     = useState("login");   // 'login' | 'signup' | 'magic'
   const [email,    setEmail]    = useState("");
@@ -18,6 +18,15 @@ const AuthScreen = ({ onBack }) => {
   const [name,     setName]     = useState("");
   const [loading,  setLoading]  = useState(false);
   const [success,  setSuccess]  = useState("");
+
+  // Sai automaticamente desta tela assim que a autenticação for concluída —
+  // cobre login com senha, e também o retorno de um magic link processado
+  // enquanto esta tela ainda está montada. Sem isso, o usuário fica "logado"
+  // por trás dos panos mas continua vendo o formulário de login até clicar
+  // em "Voltar" manualmente.
+  useEffect(() => {
+    if (user) onBack?.();
+  }, [user, onBack]);
 
   const handleSubmit = async () => {
     if (!email) return;
