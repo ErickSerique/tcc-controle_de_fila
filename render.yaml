@@ -1,0 +1,75 @@
+# render.yaml — Blueprint de deploy para fila.io
+#
+# Este arquivo deve ficar na RAIZ do repositório Git
+# (tcc-controle_de_fila/render.yaml, um nível ACIMA da pasta fila-io/).
+#
+# Como usar:
+#   1. No painel do Render → New → Blueprint → conecta este repositório.
+#   2. O Render lê este arquivo e cria os 2 serviços abaixo automaticamente.
+#   3. Depois do primeiro deploy, preencha manualmente as variáveis marcadas
+#      com "sync: false" no painel de cada serviço (ver README-DEPLOY.md).
+
+services:
+  # ── Backend: Node.js + Express + Socket.io ──────────────────────
+  - type: web
+    name: fila-io-server
+    runtime: node
+    rootDir: fila-io/server
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OPERATION_MODE
+        value: cloud
+
+      # URL do frontend publicado — necessária para o CORS (Express + Socket.io).
+      # Preencher DEPOIS do primeiro deploy do client, com a URL real gerada
+      # (algo como https://fila-io-client.onrender.com).
+      - key: CLIENT_URL
+        sync: false
+
+      # Banco de dados Postgres real — pode ser a connection string do próprio
+      # projeto Supabase (Project Settings → Database → Connection String),
+      # ou um Postgres gerenciado separado do Render.
+      - key: DATABASE_URL
+        sync: false
+
+      # Credenciais do Supabase (Project Settings → API).
+      # ⚠️ SUPABASE_SERVICE_ROLE_KEY tem privilégios totais — nunca vai no client.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # Gerado automaticamente pelo Render — não precisa preencher.
+      - key: JWT_SECRET
+        generateValue: true
+
+  # ── Frontend: React + Vite (site estático) ──────────────────────
+  - type: web
+    name: fila-io-client
+    runtime: static
+    rootDir: fila-io/client
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      # URL do backend publicado — preencher DEPOIS do deploy do server
+      # (algo como https://fila-io-server.onrender.com).
+      - key: VITE_SERVER_URL
+        sync: false
+
+      # Mesmas credenciais públicas do Supabase usadas no server,
+      # mas aqui é a ANON key (pública), nunca a service_role.
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+    routes:
+      # SPA fallback: qualquer rota (ex: /monitor/ABC123) deve servir o index.html
+      # e deixar o React Router / lógica interna do App.jsx decidir a tela.
+      - type: rewrite
+        source: /*
+        destination: /index.html
