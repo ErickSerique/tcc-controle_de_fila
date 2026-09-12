@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import socket from "../lib/socket";
+import { apiFetch } from "../lib/api";
 
 /**
  * MonitorScreen — painel para TV/monitor externo do estabelecimento.
@@ -16,9 +17,8 @@ const MonitorScreen = ({ roomCode }) => {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
-    fetch(`/api/rooms/${roomCode}`)
-      .then((r) => r.json())
-      .then((data) => !data.error && setRoom(data))
+    apiFetch(`/api/rooms/${roomCode}`)
+      .then((data) => setRoom(data))
       .catch(() => {});
 
     // Reenvia o "join" sempre que o socket conectar — incluindo reconexões após

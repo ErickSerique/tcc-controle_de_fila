@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import socket from "../lib/socket";
+import { apiFetch } from "../lib/api";
 import QRDisplay from "../components/QRDisplay";
 import Modal from "../components/Modal";
 import RecallModal from "../components/RecallModal";
@@ -117,9 +118,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch(`/api/rooms/${roomCode}/logs`, { headers: { "X-Actor-Role": staff.role } });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = await apiFetch(`/api/rooms/${roomCode}/logs`, { headers: { "X-Actor-Role": staff.role } });
       setLogs(data.logs);
       setLogsModalOpen(true);
     } catch (err) {
@@ -129,8 +128,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch("/api/rooms/meta/history");
-      const data = await res.json();
+      const data = await apiFetch("/api/rooms/meta/history");
       setHistoryData(data.history || []);
       setHistoryModalOpen(true);
     } catch (err) {
@@ -142,12 +140,10 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   const handleCloseDay = async () => {
     try {
-      const res = await fetch(`/api/rooms/${roomCode}/close`, {
+      const data = await apiFetch(`/api/rooms/${roomCode}/close`, {
         method: "POST",
         headers: { "X-Actor-Name": staff.name, "X-Actor-Role": staff.role },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
       setReport(data.report);
       setCloseDayModal(true);
     } catch (err) {

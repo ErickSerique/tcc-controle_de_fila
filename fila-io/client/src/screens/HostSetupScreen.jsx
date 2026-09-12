@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { apiFetch } from "../lib/api";
 
 const PRIORITY_OPTIONS = [
   { value: 3, label: "🔴 Alta", color: "#F87171", bg: "#7f1d1d44" },
@@ -97,17 +98,14 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/rooms", {
+      const data = await apiFetch("/api/rooms", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           "X-Actor-Name": staffName.trim(),
           "X-Actor-Role": staffRole,
         },
         body: JSON.stringify({ name: roomName.trim(), categories, counters, customFields }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao criar sala.");
 
       // Persiste identidade do operador para uso no painel (logs, socket join)
       sessionStorage.setItem("staff_identity", JSON.stringify({ name: staffName.trim(), role: staffRole }));

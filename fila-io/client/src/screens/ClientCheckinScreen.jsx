@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import CustomFieldInput, { validateCustomFields } from "../components/CustomFieldInput";
+import { apiFetch } from "../lib/api";
 
 /**
  * ClientCheckinScreen
@@ -60,9 +61,7 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
     setError("");
     setValidating(true);
     try {
-      const res = await fetch(`/api/rooms/${code.toUpperCase()}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Sala não encontrada.");
+      const data = await apiFetch(`/api/rooms/${code.toUpperCase()}`);
       setRoom(data);
       setSelectedCat(data.categories[0]?.name || "");
       setCustomValues({});
@@ -84,9 +83,8 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
     setError("");
     setJoining(true);
     try {
-      const res = await fetch("/api/queue/join", {
+      const data = await apiFetch("/api/queue/join", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           roomCode: code.toUpperCase(),
           name: name.trim(),
@@ -94,8 +92,6 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
           customData: customValues,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao entrar na fila.");
       // Armazena JWT em sessionStorage (não localStorage) — limpo ao fechar a aba
       sessionStorage.setItem("session_token", data.sessionToken);
       onJoined(data.ticket, room);
