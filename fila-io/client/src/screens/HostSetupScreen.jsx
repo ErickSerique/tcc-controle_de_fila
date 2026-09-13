@@ -31,9 +31,7 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
   const [roomName, setRoomName] = useState("");
 
   const [categories, setCategories] = useState([
-    { name: "Emergência", priority: 3, tma: 3 },
-    { name: "Consulta", priority: 2, tma: 8 },
-    { name: "Informação", priority: 1, tma: 5 },
+    { name: "Atendimento", priority: 2, tma: 5 },
   ]);
   const [newCat, setNewCat] = useState({ name: "", priority: 2, tma: 5 });
 

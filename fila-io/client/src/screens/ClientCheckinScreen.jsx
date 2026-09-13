@@ -216,15 +216,12 @@ const ClientCheckinScreen = ({ onJoined, onBack }) => {
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {room.categories.map((cat) => {
                   const selected = selectedCat === cat.name;
-                  const pColor = cat.priority === 3 ? "var(--danger)" : cat.priority === 2 ? "var(--warn)" : "var(--accent)";
-                  const pLabel = cat.priority === 3 ? "Alta" : cat.priority === 2 ? "Média" : "Baixa";
                   return (
                     <button key={cat.name} className="btn card" onClick={() => setSelectedCat(cat.name)}
                       style={{ padding: "14px 16px", textAlign: "left", display: "flex", alignItems: "center", gap: "12px", border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`, background: selected ? "var(--accent-glow)" : "var(--surface)", cursor: "pointer", transition: "all 0.2s" }}>
                       <div style={{ width: 10, height: 10, borderRadius: "50%", background: selected ? "var(--accent)" : "var(--border)", flexShrink: 0, transition: "background 0.2s" }} />
                       <span style={{ flex: 1, fontWeight: 600, color: selected ? "var(--accent)" : "var(--text)", fontSize: "14px" }}>{cat.name}</span>
                       <span className="mono" style={{ fontSize: "11px", color: "var(--text-muted)" }}>~{cat.tma}min</span>
-                      <span className="tag" style={{ background: cat.priority === 3 ? "#7f1d1d44" : cat.priority === 2 ? "#78350f44" : "#14532d44", color: pColor }}>{pLabel}</span>
                     </button>
                   );
                 })}
