@@ -1,5 +1,5 @@
 -- ============================================================
--- fila.io — Schema PostgreSQL v2.0
+-- Kiwii — Schema PostgreSQL
 -- Execute via: npm run db:migrate (server)
 -- Compatible com Supabase e PostgreSQL self-hosted >= 14
 -- ============================================================

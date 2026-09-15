@@ -1,17 +1,16 @@
 ﻿/**
  * screens/LandingScreen.jsx
  *
- * Tela inicial — agora mostra org ativa e opção de entrar/sair.
+ * Tela inicial — mostra org ativa e opção de entrar/sair.
  */
 import { useState } from "react";
+import { Users, LayoutDashboard, Ticket, Settings, Plus, AlertTriangle, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { useTheme } from "../hooks/useTheme";
 import { createOrg, updateOrg, deleteOrg } from "../lib/api";
 import ConfirmModal from "../components/ConfirmModal";
 
 const LandingScreen = ({ onNavigate }) => {
   const { user, activeOrg, orgs, switchOrg, signOut, refreshOrgs } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const [hovered, setHovered] = useState(null);
   const [showOrgMenu, setShowOrgMenu] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -59,7 +58,7 @@ const LandingScreen = ({ onNavigate }) => {
   const cards = [
     {
       role: "host",
-      icon: "🏠",
+      Icon: LayoutDashboard,
       title: "Painel do Host",
       sub: "Criar e gerenciar sala de atendimento",
       color: "var(--accent)",
@@ -69,11 +68,11 @@ const LandingScreen = ({ onNavigate }) => {
     },
     {
       role: "client",
-      icon: "🎟️",
+      Icon: Ticket,
       title: "Entrar na Fila",
       sub: "Escaneie o QR ou digite o código da sala",
-      color: "#A78BFA",
-      shadow: "rgba(167,139,250,0.18)",
+      color: "var(--info)",
+      shadow: "rgba(91,141,190,0.18)",
       target: "client-checkin",
       requiresAuth: false,
     },
@@ -86,15 +85,15 @@ const LandingScreen = ({ onNavigate }) => {
       alignItems: "center", justifyContent: "center",
       padding: "24px", position: "relative", overflow: "hidden",
     }}>
-      {/* Grid + glow de fundo */}
+      {/* Fundo: padrão de pontos sutil + glow suave e único */}
       <div style={{
         position: "absolute", inset: 0,
-        backgroundImage: "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-        backgroundSize: "40px 40px", opacity: 0.3,
+        backgroundImage: "radial-gradient(var(--border) 1px, transparent 1px)",
+        backgroundSize: "28px 28px", opacity: 0.5,
       }} />
       <div style={{
         position: "absolute", inset: 0,
-        background: "radial-gradient(ellipse 80% 60% at 50% 50%, var(--accent-glow) 0%, transparent 70%)",
+        background: "radial-gradient(ellipse 60% 45% at 50% 40%, var(--accent-glow) 0%, transparent 70%)",
       }} />
 
       {/* Barra de usuário / Autenticação no topo */}
@@ -105,8 +104,8 @@ const LandingScreen = ({ onNavigate }) => {
         justifyContent: "space-between", zIndex: 50,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <span style={{ fontSize: "15px", fontWeight: 700 }}>
-            fila<span style={{ color: "var(--accent)" }}>.io</span>
+          <span className="display" style={{ fontSize: "15px", fontWeight: 700 }}>
+            Kiwi<span style={{ color: "var(--accent)" }}>i</span>
           </span>
           {user && (
             <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
@@ -116,16 +115,6 @@ const LandingScreen = ({ onNavigate }) => {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {/* Alternador de tema */}
-          <button
-            onClick={toggleTheme}
-            className="btn"
-            style={{ fontSize: "13px", padding: "6px 12px" }}
-            title="Alternar Tema"
-          >
-            {theme === 'light' ? '🌙 Modo Escuro' : '☀️ Modo Claro'}
-          </button>
-
           {user ? (
             <>
               {/* Org switcher */}
@@ -139,7 +128,7 @@ const LandingScreen = ({ onNavigate }) => {
                     {activeOrg?.name ?? "Sem organização"}
                   </span>
                   <span className="tag" style={{ fontSize: "10px" }}>{activeOrg?.role}</span>
-                  <span style={{ color: "var(--text-muted)" }}>▾</span>
+                  <ChevronDown size={14} style={{ color: "var(--text-muted)" }} />
                 </button>
 
                 {showOrgMenu && (
@@ -166,20 +155,20 @@ const LandingScreen = ({ onNavigate }) => {
                     ))}
                     <button
                       onClick={() => { setShowOrgMenu(false); setShowCreateModal(true); }}
-                      style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px" }}>
-                      ➕ Nova Organização
+                      style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px" }}>
+                      <Plus size={15} /> Nova Organização
                     </button>
                     {activeOrg && ["owner", "admin"].includes(activeOrg.role) && (
                       <button
                         onClick={() => { setEditOrgName(activeOrg.name); setShowOrgMenu(false); setShowSettingsModal(true); }}
-                        style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px" }}>
-                        ⚙️ Configurações
+                        style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--text)", fontSize: "13px" }}>
+                        <Settings size={15} /> Configurações
                       </button>
                     )}
                     <button
                       onClick={() => { onNavigate("members"); setShowOrgMenu(false); }}
-                      style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--accent)", fontSize: "13px" }}>
-                      👥 Gerenciar Membros
+                      style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%", padding: "10px 16px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: "var(--accent)", fontSize: "13px" }}>
+                      <Users size={15} /> Gerenciar Membros
                     </button>
                   </div>
                 )}
@@ -195,12 +184,8 @@ const LandingScreen = ({ onNavigate }) => {
           ) : (
             <button
               onClick={() => onNavigate("auth")}
-              className="btn"
-              style={{
-                fontSize: "13px", padding: "6px 16px",
-                background: "var(--accent)", color: "#fff",
-                fontWeight: 600, borderRadius: "8px"
-              }}
+              className="btn btn-primary"
+              style={{ fontSize: "13px", padding: "6px 16px" }}
             >
               Entrar / Cadastrar
             </button>
@@ -215,18 +200,20 @@ const LandingScreen = ({ onNavigate }) => {
       }}>
         {/* Logo */}
         <div style={{ marginBottom: "48px" }}>
-          <div className="animate-float" style={{ display: "inline-flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
             <div style={{
               width: 44, height: 44,
-              background: "linear-gradient(135deg, var(--accent), #818cf8)",
+              background: "var(--accent)",
               borderRadius: "12px", display: "flex", alignItems: "center",
-              justifyContent: "center", fontSize: "22px",
-            }}>⚡</div>
-            <span style={{ fontSize: "30px", fontWeight: 800, letterSpacing: "-0.03em" }}>
-              fila<span style={{ color: "var(--accent)" }}>.io</span>
+              justifyContent: "center",
+            }}>
+              <Users size={22} color="#04141C" strokeWidth={2.25} />
+            </div>
+            <span className="display" style={{ fontSize: "30px", fontWeight: 800, letterSpacing: "-0.02em" }}>
+              Kiwi<span style={{ color: "var(--accent)" }}>i</span>
             </span>
           </div>
-          <p style={{ color: "var(--text-muted)", fontSize: "13px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "13px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Gestão de Filas em Tempo Real
           </p>
         </div>
@@ -243,53 +230,47 @@ const LandingScreen = ({ onNavigate }) => {
               style={{
                 padding: "26px 22px", textAlign: "left",
                 display: "flex", alignItems: "center", gap: "20px",
-                border: `1px solid ${hovered === c.role ? c.color + "55" : "var(--border)"}`,
-                transition: "all 0.3s",
-                transform: hovered === c.role ? "translateY(-3px)" : "none",
-                boxShadow: hovered === c.role ? `0 20px 60px ${c.shadow}` : "none",
+                border: `1px solid ${hovered === c.role ? c.color : "var(--border)"}`,
+                transition: "border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease",
+                transform: hovered === c.role ? "translateY(-2px)" : "none",
+                boxShadow: hovered === c.role ? `0 12px 32px ${c.shadow}` : "none",
                 cursor: "pointer", width: "100%",
-                background: hovered === c.role ? `${c.color}08` : "var(--surface)",
+                background: "var(--surface)",
               }}
             >
               <div style={{
-                width: 58, height: 58,
-                background: `${c.color}15`,
-                borderRadius: "14px", display: "flex",
+                width: 52, height: 52,
+                background: "var(--bg)", border: "1px solid var(--border)",
+                borderRadius: "12px", display: "flex",
                 alignItems: "center", justifyContent: "center",
-                fontSize: "28px", flexShrink: 0,
-                transition: "transform 0.3s",
-                transform: hovered === c.role ? "scale(1.08)" : "scale(1)",
+                flexShrink: 0,
               }}>
-                {c.icon}
+                <c.Icon size={24} color={c.color} strokeWidth={1.75} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "20px", fontWeight: 700, color: hovered === c.role ? c.color : "var(--text)", transition: "color 0.2s" }}>
+                <div style={{ fontSize: "17px", fontWeight: 700, color: hovered === c.role ? c.color : "var(--text)", transition: "color 0.2s" }}>
                   {c.title}
                 </div>
                 <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "3px" }}>
                   {c.sub}
                 </div>
               </div>
-              <div style={{ color: c.color, fontSize: "22px", opacity: hovered === c.role ? 1 : 0.25, transition: "all 0.2s", transform: hovered === c.role ? "translateX(4px)" : "none" }}>→</div>
+              <ChevronRight size={20} style={{ color: c.color, opacity: hovered === c.role ? 1 : 0.3, transition: "opacity 0.2s, transform 0.2s", transform: hovered === c.role ? "translateX(3px)" : "none", flexShrink: 0 }} />
             </button>
           ))}
         </div>
-
-        <p className="mono" style={{ marginTop: "36px", color: "var(--text-dim)", fontSize: "11px", letterSpacing: "0.08em" }}>
-          v2.0.0 · Cloud-first + Fallback Local · Socket.io
-        </p>
       </div>
 
       {/* Modal Nova Organização */}
       {showCreateModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", backdropFilter: "blur(4px)" }}>
-          <div className="card animate-fade" style={{ background: "var(--surface)", width: "100%", maxWidth: "400px", padding: "32px", border: "1px solid var(--border)", position: "relative" }}>
-            <button onClick={() => setShowCreateModal(false)} style={{ position: "absolute", top: "16px", right: "16px", background: "transparent", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-muted)" }}>×</button>
-            <h2 style={{ fontSize: "20px", marginBottom: "8px" }}>Nova Organização</h2>
+          <div className="card animate-fade" style={{ width: "100%", maxWidth: "400px", padding: "32px", position: "relative" }}>
+            <button onClick={() => setShowCreateModal(false)} style={{ position: "absolute", top: "16px", right: "16px", background: "transparent", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "flex" }}><X size={20} /></button>
+            <h2 style={{ marginBottom: "8px" }}>Nova Organização</h2>
             <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "24px" }}>Crie um novo espaço para gerenciar filas.</p>
             <input className="input" placeholder="Ex: Clínica Geral" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} style={{ marginBottom: "16px" }} autoFocus />
-            {orgError && <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "16px" }}>⚠️ {orgError}</div>}
-            <button className="btn" style={{ background: "var(--accent)", color: "#fff", border: "none", padding: "12px", borderRadius: "8px", fontWeight: 600, cursor: "pointer", width: "100%", opacity: isSubmitting ? 0.7 : 1 }} onClick={handleCreateOrg} disabled={isSubmitting || !newOrgName.trim()}>
+            {orgError && <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--danger)", fontSize: "13px", marginBottom: "16px" }}><AlertTriangle size={14} /> {orgError}</div>}
+            <button className="btn btn-primary" style={{ padding: "12px", width: "100%" }} onClick={handleCreateOrg} disabled={isSubmitting || !newOrgName.trim()}>
               {isSubmitting ? "Criando..." : "Criar Organização"}
             </button>
           </div>
@@ -299,22 +280,22 @@ const LandingScreen = ({ onNavigate }) => {
       {/* Modal Configurações */}
       {showSettingsModal && activeOrg && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", backdropFilter: "blur(4px)" }}>
-          <div className="card animate-fade" style={{ background: "var(--surface)", width: "100%", maxWidth: "400px", padding: "32px", border: "1px solid var(--border)", position: "relative" }}>
-            <button onClick={() => setShowSettingsModal(false)} style={{ position: "absolute", top: "16px", right: "16px", background: "transparent", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-muted)" }}>×</button>
-            <h2 style={{ fontSize: "20px", marginBottom: "8px" }}>Configurações</h2>
+          <div className="card animate-fade" style={{ width: "100%", maxWidth: "400px", padding: "32px", position: "relative" }}>
+            <button onClick={() => setShowSettingsModal(false)} style={{ position: "absolute", top: "16px", right: "16px", background: "transparent", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "flex" }}><X size={20} /></button>
+            <h2 style={{ marginBottom: "8px" }}>Configurações</h2>
             <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "24px" }}>Editar detalhes de {activeOrg.name}</p>
             <label style={{ display: "block", fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>Nome da Organização</label>
             <input className="input" value={editOrgName} onChange={(e) => setEditOrgName(e.target.value)} style={{ marginBottom: "16px" }} />
-            {orgError && <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "16px" }}>⚠️ {orgError}</div>}
-            <button className="btn" style={{ background: "var(--accent)", color: "#fff", border: "none", padding: "12px", borderRadius: "8px", fontWeight: 600, cursor: "pointer", width: "100%", marginBottom: "24px", opacity: isSubmitting ? 0.7 : 1 }} onClick={handleUpdateOrg} disabled={isSubmitting || !editOrgName.trim()}>
+            {orgError && <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--danger)", fontSize: "13px", marginBottom: "16px" }}><AlertTriangle size={14} /> {orgError}</div>}
+            <button className="btn btn-primary" style={{ padding: "12px", width: "100%", marginBottom: "24px" }} onClick={handleUpdateOrg} disabled={isSubmitting || !editOrgName.trim()}>
               {isSubmitting ? "Salvando..." : "Salvar Alterações"}
             </button>
 
             {activeOrg.role === "owner" && (
               <div style={{ paddingTop: "24px", borderTop: "1px solid var(--border)" }}>
-                <h3 style={{ color: "var(--danger)", fontSize: "14px", marginBottom: "8px" }}>Zona de Perigo</h3>
+                <h3 style={{ color: "var(--danger)", fontSize: "14px", marginBottom: "8px" }}>Zona de Risco</h3>
                 <p style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "16px" }}>Excluir esta organização apagará todos os membros e salas permanentemente.</p>
-                <button className="btn" style={{ width: "100%", padding: "10px", color: "var(--danger)", border: "1px solid rgba(239,68,68,0.3)", background: "transparent", borderRadius: "8px", cursor: "pointer" }} onClick={() => setDeleteConfirm(true)} disabled={isSubmitting}>
+                <button className="btn" style={{ width: "100%", padding: "10px", color: "var(--danger)", border: "1px solid var(--danger-glow)" }} onClick={() => setDeleteConfirm(true)} disabled={isSubmitting}>
                   Excluir Organização
                 </button>
               </div>

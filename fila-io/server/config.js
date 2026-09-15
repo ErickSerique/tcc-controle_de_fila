@@ -14,7 +14,7 @@ module.exports = {
   CLIENT_URL: process.env.CLIENT_URL || "http://localhost:5173",
 
   // Banco de dados
-  DATABASE_URL: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/fila_io",
+  DATABASE_URL: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/kiwii",
 
   // Redis
   REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",

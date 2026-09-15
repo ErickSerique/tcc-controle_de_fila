@@ -1,6 +1,4 @@
 ﻿/**
- * server/index.js — fila.io v2.0
- *
  * Ponto de entrada do servidor.
  * Inicializa Express, Socket.io, PostgreSQL pool e modo híbrido.
  */
@@ -65,7 +63,7 @@ app.use(rateLimiter);
 // ── Rotas ──────────────────────────────────────────────────────────
 app.get("/api", (_req, res) =>
   res.json({
-    name: "fila.io API",
+    name: "Kiwii API",
     version: "2.0.0",
     endpoints: {
       auth:   "/api/auth",
@@ -118,7 +116,7 @@ if (config.OPERATION_MODE === "hybrid") {
 // ── Start ──────────────────────────────────────────────────────────
 httpServer.listen(config.PORT, () => {
   console.log(`
-  ⚡ fila.io v2.0 — servidor iniciado
+  ⚡ Kiwii — servidor iniciado
   ─────────────────────────────────────
   Modo     →  ${config.OPERATION_MODE.toUpperCase()}
   REST     →  http://localhost:${config.PORT}/api

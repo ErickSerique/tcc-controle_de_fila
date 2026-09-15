@@ -1,5 +1,5 @@
 ﻿/**
- * socket/handlers.js — fila.io v2.0
+ * socket/handlers.js — Kiwii
  *
  * Registra todos os manipuladores de eventos em tempo real via Socket.io.
  */

@@ -7,6 +7,7 @@
  *   magic     → magic link (sem senha)
  */
 import { useState, useEffect } from "react";
+import { AlertTriangle, CheckCircle2, ArrowLeft } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 const AuthScreen = ({ onBack }) => {
@@ -21,9 +22,7 @@ const AuthScreen = ({ onBack }) => {
 
   // Sai automaticamente desta tela assim que a autenticação for concluída —
   // cobre login com senha, e também o retorno de um magic link processado
-  // enquanto esta tela ainda está montada. Sem isso, o usuário fica "logado"
-  // por trás dos panos mas continua vendo o formulário de login até clicar
-  // em "Voltar" manualmente.
+  // enquanto esta tela ainda está montada.
   useEffect(() => {
     if (user) onBack?.();
   }, [user, onBack]);
@@ -49,20 +48,6 @@ const AuthScreen = ({ onBack }) => {
     setLoading(false);
   };
 
-  const inputStyle = {
-    background: "var(--surface)",
-    border: "1px solid var(--border)",
-    color: "var(--text)",
-    borderRadius: "8px",
-    padding: "12px 16px",
-    fontSize: "0.875rem",
-    outline: "none",
-    width: "100%",
-    marginBottom: "12px",
-    fontFamily: "inherit",
-    transition: "border-color 0.2s",
-  };
-
   const tabs = [
     { key: "login",  label: "Entrar" },
     { key: "signup", label: "Criar Conta" },
@@ -70,48 +55,41 @@ const AuthScreen = ({ onBack }) => {
   ];
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--bg)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      {/* Grid de fundo */}
+    <div style={{
+      minHeight: "100vh", background: "var(--bg)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: "24px", position: "relative", overflow: "hidden",
+    }}>
+      {/* Fundo: pontos sutis + glow único e comedido */}
       <div style={{
         position: "absolute", inset: 0,
-        backgroundImage: "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-        backgroundSize: "40px 40px",
-        opacity: 0.3,
+        backgroundImage: "radial-gradient(var(--border) 1px, transparent 1px)",
+        backgroundSize: "28px 28px", opacity: 0.5,
       }} />
       <div style={{
         position: "absolute", inset: 0,
-        background: "radial-gradient(ellipse 70% 60% at 50% 50%, var(--accent-glow) 0%, transparent 70%)",
+        background: "radial-gradient(ellipse 55% 45% at 50% 45%, var(--accent-glow) 0%, transparent 70%)",
       }} />
 
       <div className="animate-fade" style={{ width: "100%", maxWidth: "420px", position: "relative", zIndex: 1 }}>
         {onBack && (
           <button
             onClick={onBack}
+            className="btn"
             style={{
-              position: "absolute", top: "-40px", left: "0",
-              background: "transparent", border: "none", color: "var(--text-muted)",
-              cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px",
-              fontFamily: "inherit", fontWeight: 500
+              position: "absolute", top: "-52px", left: "0",
+              background: "transparent", border: "none", padding: "6px 0",
+              fontSize: "13px", color: "var(--text-muted)",
             }}
           >
-            ← Voltar
+            <ArrowLeft size={15} /> Voltar
           </button>
         )}
+
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: "36px" }}>
-          <div className="animate-float" style={{ fontSize: "32px", fontWeight: 800, marginBottom: "8px" }}>
-            fila<span style={{ color: "var(--accent)" }}>.io</span>
+          <div className="display" style={{ fontSize: "30px", fontWeight: 800, marginBottom: "8px" }}>
+            Kiwi<span style={{ color: "var(--accent)" }}>i</span>
           </div>
           <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
             Gestão de Filas em Tempo Real
@@ -122,25 +100,20 @@ const AuthScreen = ({ onBack }) => {
           {/* Tabs */}
           <div style={{
             display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
-            background: "var(--surface-hover)", borderRadius: "10px",
+            background: "var(--bg)", borderRadius: "10px",
             padding: "4px", marginBottom: "28px", gap: "2px",
+            border: "1px solid var(--border)",
           }}>
             {tabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => { setMode(t.key); setAuthError(null); setSuccess(""); }}
                 style={{
-                  padding: "8px",
-                  borderRadius: "8px",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  fontFamily: "inherit",
-                  transition: "all 0.2s",
-                  background: mode === t.key ? "var(--bg)" : "transparent",
+                  padding: "8px", borderRadius: "8px", border: "none", cursor: "pointer",
+                  fontSize: "13px", fontWeight: 600, fontFamily: "inherit",
+                  transition: "background-color 0.18s ease, color 0.18s ease",
+                  background: mode === t.key ? "var(--surface)" : "transparent",
                   color: mode === t.key ? "var(--accent)" : "var(--text-muted)",
-                  boxShadow: mode === t.key ? "var(--shadow-sm)" : "none",
                 }}
               >
                 {t.label}
@@ -151,50 +124,55 @@ const AuthScreen = ({ onBack }) => {
           {/* Campos */}
           {mode === "signup" && (
             <input
-              style={inputStyle}
+              className="input"
               placeholder="Seu nome completo"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              style={{ marginBottom: "12px" }}
             />
           )}
 
           <input
-            style={inputStyle}
+            className="input"
             type="email"
             placeholder="E-mail"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+            style={{ marginBottom: "12px" }}
           />
 
           {mode !== "magic" && (
             <input
-              style={inputStyle}
+              className="input"
               type="password"
               placeholder="Senha"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              style={{ marginBottom: "12px" }}
             />
           )}
 
           {/* Feedback */}
           {authError && (
             <div style={{
-              background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
+              display: "flex", alignItems: "center", gap: "8px",
+              background: "var(--danger-glow)", border: "1px solid var(--danger-glow)",
               borderRadius: "8px", padding: "10px 14px",
               color: "var(--danger)", fontSize: "13px", marginBottom: "14px",
             }}>
-              ⚠️ {authError}
+              <AlertTriangle size={15} style={{ flexShrink: 0 }} /> {authError}
             </div>
           )}
           {success && (
             <div style={{
-              background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)",
+              display: "flex", alignItems: "center", gap: "8px",
+              background: "var(--success-glow)", border: "1px solid var(--success-glow)",
               borderRadius: "8px", padding: "10px 14px",
               color: "var(--success)", fontSize: "13px", marginBottom: "14px",
             }}>
-              ✓ {success}
+              <CheckCircle2 size={15} style={{ flexShrink: 0 }} /> {success}
             </div>
           )}
 
@@ -202,18 +180,8 @@ const AuthScreen = ({ onBack }) => {
           <button
             onClick={handleSubmit}
             disabled={loading || !email}
-            style={{
-              width: "100%", padding: "14px",
-              background: loading || !email
-                ? "var(--surface-hover)"
-                : "linear-gradient(135deg, var(--accent), #818cf8)",
-              color: loading || !email ? "var(--text-dim)" : "#fff",
-              border: "none", borderRadius: "10px",
-              fontSize: "15px", fontWeight: 700,
-              cursor: loading || !email ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-              transition: "all 0.2s",
-            }}
+            className="btn btn-primary"
+            style={{ width: "100%", padding: "13px", fontSize: "15px" }}
           >
             {loading ? "Aguarde..." : mode === "login" ? "Entrar" : mode === "signup" ? "Criar Conta" : "Enviar Link"}
           </button>
@@ -224,13 +192,6 @@ const AuthScreen = ({ onBack }) => {
             </p>
           )}
         </div>
-
-        <p className="mono" style={{
-          textAlign: "center", marginTop: "20px",
-          color: "var(--text-dim)", fontSize: "11px",
-        }}>
-          v2.0.0 · Cloud-first · Socket.io
-        </p>
       </div>
     </div>
   );

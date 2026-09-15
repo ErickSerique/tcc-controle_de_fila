@@ -1,54 +1,40 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* ─── Design Tokens ──────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────
+   Kiwii — Design Tokens
+   Tema único (escuro). Paleta ancorada em painéis de senha físicos
+   reais: azul petróleo institucional como identidade, âmbar quente
+   reservado para o momento de chamada, verde só como sinal de sucesso.
+───────────────────────────────────────────────────────────── */
 :root {
-  --bg:            #ffffff;
-  --surface:       #f8fafc;
-  --surface-hover: #f1f5f9;
-  --border:        #e2e8f0;
+  --bg:            #0B1220;
+  --surface:       #111A2C;
+  --surface-hover: #182338;
+  --border:        #233047;
 
-  --accent:        #4f46e5;
-  --accent-hover:  #4338ca;
-  --accent-glow:   rgba(79, 70, 229, 0.12);
-  --accent-dim:    rgba(79, 70, 229, 0.3);
-  --accent-light:  #e0e7ff;
+  --accent:        #3E8FB0;
+  --accent-hover:  #56A8C9;
+  --accent-glow:   rgba(62, 143, 176, 0.18);
+  --accent-dim:    rgba(62, 143, 176, 0.4);
+  --accent-light:  rgba(62, 143, 176, 0.1);
 
-  --warn:          #f59e0b;
-  --danger:        #ef4444;
-  --success:       #10b981;
-  --info:          #3b82f6;
+  --warn:          #E8A33D;
+  --warn-glow:     rgba(232, 163, 61, 0.18);
+  --danger:        #E5484D;
+  --danger-glow:   rgba(229, 72, 77, 0.16);
+  --success:       #3FB88A;
+  --success-glow:  rgba(63, 184, 138, 0.16);
+  --info:          #5B8DBE;
+  --purple:        #8B84B8;
 
-  --text:          #0f172a;
-  --text-muted:    #475569;
-  --text-dim:      #94a3b8;
+  --text:          #E7EDF5;
+  --text-muted:    #8B9AB0;
+  --text-dim:      #4C5A70;
 
-  --shadow-sm:  0 1px 2px 0 rgba(0,0,0,0.05);
-  --shadow-md:  0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.06);
-  --shadow-lg:  0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.05);
-  --ring:       rgba(79, 70, 229, 0.2);
-}
-
-/* ─── Dark Theme ─────────────────────────────────────────────── */
-:root[data-theme='dark'] {
-  --bg:            #09090b;
-  --surface:       #18181b;
-  --surface-hover: #27272a;
-  --border:        #27272a;
-
-  --accent:        #6366f1;
-  --accent-hover:  #818cf8;
-  --accent-glow:   rgba(99, 102, 241, 0.18);
-  --accent-dim:    rgba(99, 102, 241, 0.35);
-  --accent-light:  rgba(99, 102, 241, 0.1);
-
-  --text:          #f8fafc;
-  --text-muted:    #a1a1aa;
-  --text-dim:      #52525b;
-
-  --shadow-sm:  0 1px 2px 0 rgba(0,0,0,0.5);
-  --shadow-md:  0 4px 6px -1px rgba(0,0,0,0.4), 0 2px 4px -2px rgba(0,0,0,0.2);
-  --shadow-lg:  0 10px 15px -3px rgba(0,0,0,0.5), 0 4px 6px -4px rgba(0,0,0,0.3);
-  --ring:       rgba(99, 102, 241, 0.35);
+  --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.5), 0 2px 4px -2px rgba(0,0,0,0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.55), 0 4px 6px -4px rgba(0,0,0,0.35);
+  --ring: rgba(62, 143, 176, 0.35);
 }
 
 /* ─── Reset ──────────────────────────────────────────────────── */
@@ -57,12 +43,11 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  transition: background-color 0.3s, color 0.3s;
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────── */
@@ -72,22 +57,22 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 
 /* ─── Typography ─────────────────────────────────────────────── */
-.mono { font-family: 'Fira Code', ui-monospace, Menlo, Monaco, Consolas, monospace; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, Monaco, Consolas, monospace; }
+.display { font-family: 'Sora', 'Manrope', sans-serif; }
 
-h1 { font-size: 2.25rem; font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; }
-h2 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em;  line-height: 1.2; }
-h3 { font-size: 1.25rem; font-weight: 600; line-height: 1.3; }
+h1 { font-family: 'Sora', sans-serif; font-size: 2.25rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+h2 { font-family: 'Sora', sans-serif; font-size: 1.75rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+h3 { font-family: 'Sora', sans-serif; font-size: 1.25rem; font-weight: 600; line-height: 1.3; }
 p  { color: var(--text-muted); }
 
 /* ─── Tag / Badge ────────────────────────────────────────────── */
 .tag {
-  display: inline-flex; align-items: center;
+  display: inline-flex; align-items: center; gap: 4px;
   padding: 3px 10px; border-radius: 9999px;
   font-size: 0.7rem; font-weight: 600;
-  letter-spacing: 0.05em; text-transform: uppercase;
+  letter-spacing: 0.04em; text-transform: uppercase;
   background: var(--accent-light); color: var(--accent);
   border: 1px solid var(--accent-dim);
-  transition: all 0.2s;
 }
 
 /* ─── Card ───────────────────────────────────────────────────── */
@@ -96,13 +81,7 @@ p  { color: var(--text-muted); }
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 20px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
-}
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--accent-dim);
+  transition: border-color 0.25s ease;
 }
 
 /* ─── Button ─────────────────────────────────────────────────── */
@@ -110,9 +89,9 @@ p  { color: var(--text-muted); }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   cursor: pointer; border: 1px solid var(--border);
   background: var(--surface); color: var(--text);
-  font-family: inherit; font-weight: 500; font-size: 0.875rem;
-  padding: 9px 16px; border-radius: 8px; box-shadow: var(--shadow-sm);
-  transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+  font-family: 'Manrope', inherit; font-weight: 600; font-size: 0.875rem;
+  padding: 9px 16px; border-radius: 10px;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
   outline: none;
 }
 .btn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--text-dim); }
@@ -120,45 +99,38 @@ p  { color: var(--text-muted); }
 .btn:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .btn-primary {
-  background: var(--accent); color: #fff; border-color: var(--accent);
-  box-shadow: 0 4px 6px -1px var(--accent-glow);
+  background: var(--accent); color: #04141C; border-color: var(--accent);
 }
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover); border-color: var(--accent-hover);
-  transform: translateY(-1px);
-}
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 
 /* ─── Input ──────────────────────────────────────────────────── */
 .input {
   width: 100%;
   background: var(--bg); border: 1px solid var(--border); color: var(--text);
-  font-family: inherit; border-radius: 8px;
+  font-family: 'Manrope', inherit; border-radius: 10px;
   padding: 11px 14px; font-size: 0.875rem; outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 .input:hover { border-color: var(--text-dim); }
-.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); background: var(--surface); }
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .input::placeholder { color: var(--text-dim); }
 
 select.input {
   cursor: pointer; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238B9AB0'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 10px center; background-size: 16px;
   padding-right: 36px;
 }
 
 /* ─── Animations ─────────────────────────────────────────────── */
-@keyframes fadeIn    { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes slideIn   { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes float     { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-@keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 20px 2px var(--accent-glow); } }
+/* Curva consistente para toda a interface — sem exagero de "float"/glow em todo canto. */
+@keyframes fadeIn    { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideIn   { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 24px 2px var(--warn-glow); } }
 @keyframes shake     { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 @keyframes ringPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.4); } }
-@keyframes spin      { to { transform: rotate(360deg); } }
 
-.animate-fade  { animation: fadeIn  0.45s cubic-bezier(0.16,1,0.3,1) forwards; }
-.animate-slide { animation: slideIn 0.35s cubic-bezier(0.16,1,0.3,1) forwards; }
-.animate-float { animation: float   4s ease-in-out infinite; }
-.animate-glow  { animation: pulseGlow 3s infinite; }
-.animate-shake { animation: shake   0.4s ease; }
+.animate-fade  { animation: fadeIn  0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.animate-slide { animation: slideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.animate-glow  { animation: pulseGlow 2.4s ease-in-out infinite; }
+.animate-shake { animation: shake 0.4s ease; }
