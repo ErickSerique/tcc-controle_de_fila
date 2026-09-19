@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Bell, Inbox } from "lucide-react";
 import socket from "../lib/socket";
 import { apiFetch } from "../lib/api";
 
@@ -50,8 +51,8 @@ const MonitorScreen = ({ roomCode }) => {
     <div style={{ minHeight: "100vh", background: "var(--bg)", padding: "40px", display: "flex", flexDirection: "column" }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "40px" }}>
-        <div style={{ fontSize: "32px", fontWeight: 800 }}>
-          fila<span style={{ color: "var(--accent)" }}>.io</span>
+        <div className="display" style={{ fontSize: "32px", fontWeight: 800 }}>
+          Kiwi<span style={{ color: "var(--accent)" }}>i</span>
           {room && <span style={{ color: "var(--text-muted)", fontSize: "22px", marginLeft: "16px", fontWeight: 500 }}>{room.name}</span>}
         </div>
         <div className="mono" style={{ fontSize: "28px", color: "var(--text-muted)" }}>
@@ -62,8 +63,8 @@ const MonitorScreen = ({ roomCode }) => {
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "32px", flex: 1 }}>
         {/* Chamando agora */}
         <div>
-          <h2 className="mono" style={{ fontSize: "16px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "16px" }}>
-            🔔 Chamando Agora
+          <h2 className="mono" style={{ fontSize: "16px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <Bell size={18} color="var(--warn)" /> Chamando Agora
           </h2>
           {callingNow.length === 0 ? (
             <div className="card" style={{ padding: "60px", textAlign: "center", color: "var(--text-dim)", fontSize: "20px" }}>
@@ -72,14 +73,14 @@ const MonitorScreen = ({ roomCode }) => {
           ) : (
             <div style={{ display: "grid", gap: "16px" }}>
               {callingNow.map((t) => (
-                <div key={t.token} className="card animate-glow" style={{ padding: "28px 32px", border: "2px solid var(--accent)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div key={t.token} className="card animate-glow" style={{ padding: "28px 32px", border: "2px solid var(--warn)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div style={{ fontSize: "34px", fontWeight: 800, color: "var(--accent)" }}>{t.name}</div>
+                    <div className="display" style={{ fontSize: "34px", fontWeight: 800, color: "var(--text)" }}>{t.name}</div>
                     <div style={{ fontSize: "16px", color: "var(--text-muted)", marginTop: "4px" }}>{t.category}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div className="mono" style={{ fontSize: "13px", color: "var(--text-muted)" }}>DIRIJA-SE A</div>
-                    <div style={{ fontSize: "28px", fontWeight: 800, color: "var(--purple)" }}>{t.counter}</div>
+                    <div className="display" style={{ fontSize: "28px", fontWeight: 800, color: "var(--warn)" }}>{t.counter}</div>
                   </div>
                 </div>
               ))}
@@ -94,7 +95,9 @@ const MonitorScreen = ({ roomCode }) => {
           </h2>
           <div className="card" style={{ overflow: "hidden" }}>
             {nextUp.length === 0 ? (
-              <div style={{ padding: "40px", textAlign: "center", color: "var(--text-dim)" }}>Fila vazia</div>
+              <div style={{ padding: "40px", textAlign: "center", color: "var(--text-dim)", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+                <Inbox size={26} style={{ opacity: 0.6 }} /> Fila vazia
+              </div>
             ) : (
               nextUp.map((t, i) => (
                 <div key={t.token} style={{ display: "flex", alignItems: "center", gap: "16px", padding: "18px 24px", borderBottom: i < nextUp.length - 1 ? "1px solid var(--border)" : "none" }}>

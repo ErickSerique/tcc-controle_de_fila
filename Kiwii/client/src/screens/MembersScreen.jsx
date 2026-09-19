@@ -5,6 +5,7 @@
  * Acessível por: admin, owner
  */
 import { useState, useEffect } from "react";
+import { ArrowLeft, AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { fetchOrgMembers, inviteMember, updateMemberRole, removeMember } from "../lib/api";
 
@@ -35,7 +36,6 @@ const MembersScreen = ({ onBack }) => {
   const handleInvite = async () => {
     if (!inviteEmail) return;
 
-    // Validação básica de e-mail no frontend
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(inviteEmail)) {
       setError("Por favor, informe um e-mail válido.");
@@ -78,9 +78,11 @@ const MembersScreen = ({ onBack }) => {
       <div className="animate-fade">
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "28px", paddingTop: "8px" }}>
-          <button className="btn" onClick={onBack} style={{ padding: "8px 14px", fontSize: "13px" }}>← Voltar</button>
+          <button className="btn" onClick={onBack} style={{ padding: "8px 14px", fontSize: "13px" }}>
+            <ArrowLeft size={14} /> Voltar
+          </button>
           <div>
-            <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "2px" }}>Membros</h2>
+            <h2 style={{ fontSize: "1.25rem", marginBottom: "2px" }}>Membros</h2>
             <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>{activeOrg?.name}</p>
           </div>
         </div>
@@ -88,7 +90,7 @@ const MembersScreen = ({ onBack }) => {
         {/* Convidar membro */}
         {canManage && (
           <div className="card" style={{ padding: "20px", marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px" }}>Convidar Membro</h3>
+            <h3 style={{ fontSize: "14px", marginBottom: "14px" }}>Convidar Membro</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "10px", alignItems: "end" }}>
               <input
                 className="input"
@@ -98,30 +100,25 @@ const MembersScreen = ({ onBack }) => {
                 onChange={(e) => setInviteEmail(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleInvite()}
               />
-              <select
-                className="input"
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-                style={{ width: "auto" }}
-              >
+              <select className="input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} style={{ width: "auto" }}>
                 <option value="operator">Operador</option>
                 <option value="admin">Admin</option>
               </select>
-              <button
-                className="btn btn-primary"
-                onClick={handleInvite}
-                disabled={inviting || !inviteEmail}
-              >
+              <button className="btn btn-primary" onClick={handleInvite} disabled={inviting || !inviteEmail}>
                 {inviting ? "..." : "Convidar"}
               </button>
             </div>
-            {inviteOk && <p style={{ color: "var(--success)", fontSize: "13px", marginTop: "8px" }}>✓ {inviteOk}</p>}
+            {inviteOk && (
+              <p style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--success)", fontSize: "13px", marginTop: "8px" }}>
+                <CheckCircle2 size={14} /> {inviteOk}
+              </p>
+            )}
           </div>
         )}
 
         {error && (
-          <div style={{ color: "var(--danger)", fontSize: "13px", marginBottom: "14px", padding: "10px 14px", background: "rgba(239,68,68,0.1)", borderRadius: "8px" }}>
-            ⚠️ {error}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--danger)", fontSize: "13px", marginBottom: "14px", padding: "10px 14px", background: "var(--danger-glow)", borderRadius: "8px" }}>
+            <AlertTriangle size={14} /> {error}
           </div>
         )}
 
@@ -137,18 +134,10 @@ const MembersScreen = ({ onBack }) => {
             <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Carregando...</div>
           ) : (
             members.map((m, i) => (
-              <div
-                key={m.user_id}
-                style={{
-                  display: "flex", alignItems: "center", gap: "14px",
-                  padding: "14px 20px",
-                  borderBottom: i < members.length - 1 ? "1px solid var(--border)" : "none",
-                }}
-              >
-                {/* Avatar */}
+              <div key={m.user_id} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 20px", borderBottom: i < members.length - 1 ? "1px solid var(--border)" : "none" }}>
                 <div style={{
                   width: 38, height: 38, borderRadius: "50%",
-                  background: "var(--accent-glow)", border: "1px solid var(--accent-dim)",
+                  background: "var(--accent-light)", border: "1px solid var(--accent-dim)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: "15px", fontWeight: 700, color: "var(--accent)", flexShrink: 0,
                 }}>
@@ -159,39 +148,23 @@ const MembersScreen = ({ onBack }) => {
                   <div style={{ fontWeight: 600, fontSize: "14px" }}>
                     {m.name}
                     {m.user_id === user?.id && (
-                      <span className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "8px" }}>
-                        (você)
-                      </span>
+                      <span className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "8px" }}>(você)</span>
                     )}
                   </div>
                 </div>
 
-                {/* Role selector ou badge */}
                 {canManage && m.user_id !== user?.id && m.role !== "owner" ? (
-                  <select
-                    className="input"
-                    value={m.role}
-                    onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
-                    style={{ width: "auto", fontSize: "12px", padding: "6px 10px" }}
-                  >
+                  <select className="input" value={m.role} onChange={(e) => handleRoleChange(m.user_id, e.target.value)} style={{ width: "auto", fontSize: "12px", padding: "6px 10px" }}>
                     <option value="operator">Operador</option>
                     <option value="admin">Admin</option>
                   </select>
                 ) : (
-                  <span className="tag" style={{ color: ROLE_COLORS[m.role] }}>
-                    {ROLE_LABELS[m.role]}
-                  </span>
+                  <span className="tag" style={{ color: ROLE_COLORS[m.role] }}>{ROLE_LABELS[m.role]}</span>
                 )}
 
-                {/* Remover */}
                 {canManage && m.user_id !== user?.id && m.role !== "owner" && (
-                  <button
-                    className="btn"
-                    onClick={() => handleRemove(m.user_id, m.name)}
-                    style={{ padding: "6px 10px", color: "var(--danger)", fontSize: "13px", background: "transparent", border: "none" }}
-                    aria-label="Remover membro"
-                  >
-                    ✕
+                  <button className="btn" onClick={() => handleRemove(m.user_id, m.name)} style={{ padding: "6px", color: "var(--danger)", background: "transparent", border: "none" }} aria-label="Remover membro">
+                    <X size={15} />
                   </button>
                 )}
               </div>

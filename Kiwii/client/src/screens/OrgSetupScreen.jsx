@@ -6,6 +6,7 @@
  *   b) Pertence a várias → escolhe qual usar ou cria nova
  */
 import { useState } from "react";
+import { ArrowRight, ArrowLeft, Plus, AlertTriangle } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { createOrg } from "../lib/api";
 
@@ -24,7 +25,6 @@ const OrgSetupScreen = ({ onReady }) => {
     try {
       await createOrg(orgName.trim());
       await refreshOrgs();
-      // refreshOrgs atualiza o contexto; onReady será chamado pelo App
       onReady();
     } catch (err) {
       setError(err.message);
@@ -47,39 +47,29 @@ const OrgSetupScreen = ({ onReady }) => {
       <div className="animate-fade" style={{ width: "100%", maxWidth: "440px" }}>
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "32px" }}>
-          <div style={{ fontSize: "28px", fontWeight: 800, marginBottom: "6px" }}>
-            fila<span style={{ color: "var(--accent)" }}>.io</span>
+          <div className="display" style={{ fontSize: "26px", fontWeight: 800, marginBottom: "6px" }}>
+            Kiwi<span style={{ color: "var(--accent)" }}>i</span>
           </div>
           <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
-            Olá, {user?.profile?.name ?? user?.email} 👋
+            Olá, {user?.profile?.name ?? user?.email}
           </p>
         </div>
 
         {/* Lista de orgs existentes */}
         {orgs.length > 0 && !creating && (
           <div className="card" style={{ padding: "24px", marginBottom: "16px" }}>
-            <h3 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "16px" }}>
+            <h3 style={{ fontSize: "15px", marginBottom: "16px" }}>
               Suas Organizações
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {orgs.map((org) => (
                 <button
                   key={org.id}
+                  className="btn"
                   onClick={() => handleSelect(org)}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "14px 16px", borderRadius: "10px",
-                    border: "1px solid var(--border)", cursor: "pointer",
-                    background: "var(--surface)", transition: "all 0.2s",
-                    fontFamily: "inherit",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "var(--accent)";
-                    e.currentTarget.style.background = "var(--accent-glow)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "var(--border)";
-                    e.currentTarget.style.background = "var(--surface)";
+                    padding: "14px 16px",
                   }}
                 >
                   <div style={{ textAlign: "left" }}>
@@ -90,22 +80,14 @@ const OrgSetupScreen = ({ onReady }) => {
                       {org.role}
                     </div>
                   </div>
-                  <span style={{ color: "var(--accent)", fontSize: "18px" }}>→</span>
+                  <ArrowRight size={16} color="var(--accent)" />
                 </button>
               ))}
             </div>
 
-            <button
-              onClick={() => setCreating(true)}
-              style={{
-                marginTop: "14px", width: "100%", padding: "12px",
-                background: "transparent", color: "var(--accent)",
-                border: "1px dashed var(--accent-dim)", borderRadius: "8px",
-                fontSize: "13px", fontWeight: 600, cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              + Criar nova organização
+            <button className="btn" onClick={() => setCreating(true)}
+              style={{ marginTop: "14px", width: "100%", padding: "12px", color: "var(--accent)", border: "1px dashed var(--accent-dim)", fontSize: "13px" }}>
+              <Plus size={14} /> Criar nova organização
             </button>
           </div>
         )}
@@ -113,7 +95,7 @@ const OrgSetupScreen = ({ onReady }) => {
         {/* Formulário de criação */}
         {creating && (
           <div className="card" style={{ padding: "28px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "6px" }}>
+            <h3 style={{ fontSize: "16px", marginBottom: "6px" }}>
               {orgs.length === 0 ? "Crie sua primeira organização" : "Nova Organização"}
             </h3>
             <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "20px" }}>
@@ -134,42 +116,18 @@ const OrgSetupScreen = ({ onReady }) => {
             />
 
             {error && (
-              <div style={{
-                color: "var(--danger)", fontSize: "13px",
-                marginBottom: "12px", padding: "10px 14px",
-                background: "rgba(239,68,68,0.1)", borderRadius: "8px",
-              }}>
-                ⚠️ {error}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--danger)", fontSize: "13px", marginBottom: "12px", padding: "10px 14px", background: "var(--danger-glow)", borderRadius: "8px" }}>
+                <AlertTriangle size={14} /> {error}
               </div>
             )}
 
             <div style={{ display: "flex", gap: "10px" }}>
               {orgs.length > 0 && (
-                <button
-                  onClick={() => setCreating(false)}
-                  style={{
-                    padding: "12px 18px", borderRadius: "8px",
-                    border: "1px solid var(--border)", background: "transparent",
-                    color: "var(--text-muted)", cursor: "pointer", fontFamily: "inherit",
-                  }}
-                >
-                  ←
+                <button className="btn" onClick={() => setCreating(false)} style={{ padding: "12px 16px" }}>
+                  <ArrowLeft size={15} />
                 </button>
               )}
-              <button
-                onClick={handleCreate}
-                disabled={loading || !orgName.trim()}
-                style={{
-                  flex: 1, padding: "14px",
-                  background: loading || !orgName.trim()
-                    ? "var(--surface-hover)"
-                    : "linear-gradient(135deg, var(--accent), #818cf8)",
-                  color: loading || !orgName.trim() ? "var(--text-dim)" : "#fff",
-                  border: "none", borderRadius: "10px",
-                  fontSize: "14px", fontWeight: 700, cursor: "pointer",
-                  fontFamily: "inherit", transition: "all 0.2s",
-                }}
-              >
+              <button className="btn btn-primary" onClick={handleCreate} disabled={loading || !orgName.trim()} style={{ flex: 1, padding: "14px", fontSize: "14px" }}>
                 {loading ? "Criando..." : "Criar Organização"}
               </button>
             </div>
@@ -177,14 +135,7 @@ const OrgSetupScreen = ({ onReady }) => {
         )}
 
         <div style={{ textAlign: "center", marginTop: "20px" }}>
-          <button
-            onClick={signOut}
-            style={{
-              background: "transparent", border: "none",
-              color: "var(--text-dim)", fontSize: "12px",
-              cursor: "pointer", fontFamily: "inherit",
-            }}
-          >
+          <button onClick={signOut} className="btn" style={{ background: "transparent", border: "none", color: "var(--text-dim)", fontSize: "12px" }}>
             Sair da conta
           </button>
         </div>

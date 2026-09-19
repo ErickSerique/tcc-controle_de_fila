@@ -34,7 +34,7 @@ export default function App() {
 
   const [screen, setScreen] = useState(() => {
     try {
-      return sessionStorage.getItem("fila_io_screen") || "landing";
+      return sessionStorage.getItem("kiwii_screen") || "landing";
     } catch {
       return "landing";
     }
@@ -42,7 +42,7 @@ export default function App() {
 
   const [ctx, setCtx] = useState(() => {
     try {
-      const saved = sessionStorage.getItem("fila_io_ctx");
+      const saved = sessionStorage.getItem("kiwii_ctx");
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -58,8 +58,8 @@ export default function App() {
     setCtx(data);
     setScreen(target);
     try {
-      sessionStorage.setItem("fila_io_screen", target);
-      sessionStorage.setItem("fila_io_ctx", JSON.stringify(data));
+      sessionStorage.setItem("kiwii_screen", target);
+      sessionStorage.setItem("kiwii_ctx", JSON.stringify(data));
     } catch {}
   };
 

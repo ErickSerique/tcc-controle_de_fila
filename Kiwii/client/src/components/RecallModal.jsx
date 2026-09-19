@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { RotateCcw, Volume2, CornerUpLeft } from "lucide-react";
 import Modal from "./Modal";
 
 /**
@@ -29,8 +30,8 @@ const RecallModal = ({ open, onClose, ticket, counters, onRecall }) => {
 
   return (
     <Modal open={open} onClose={onClose} maxWidth="420px">
-      <h3 style={{ fontWeight: 700, marginBottom: "6px", fontSize: "17px" }}>
-        🔁 Chamar de Volta
+      <h3 style={{ fontWeight: 700, marginBottom: "6px", fontSize: "17px", display: "flex", alignItems: "center", gap: "8px" }}>
+        <RotateCcw size={17} color="var(--accent)" /> Chamar de Volta
       </h3>
       <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "20px" }}>
         {ticket.name} · {ticket.category}
@@ -41,16 +42,19 @@ const RecallModal = ({ open, onClose, ticket, counters, onRecall }) => {
           className="btn"
           onClick={() => setMode("counter")}
           style={{
-            padding: "14px", textAlign: "left",
+            padding: "14px", textAlign: "left", display: "flex", alignItems: "flex-start", gap: "10px",
             border: `1px solid ${mode === "counter" ? "var(--accent)" : "var(--border)"}`,
-            background: mode === "counter" ? "var(--accent-glow)" : "var(--surface)",
+            background: mode === "counter" ? "var(--accent-light)" : "var(--surface)",
           }}
         >
-          <div style={{ fontWeight: 700, color: mode === "counter" ? "var(--accent)" : "var(--text)", fontSize: "14px" }}>
-            📢 Chamar direto para o guichê
-          </div>
-          <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
-            Pula a fila — vai direto para "Em Atendimento"
+          <Volume2 size={16} color={mode === "counter" ? "var(--accent)" : "var(--text-muted)"} style={{ marginTop: "2px", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontWeight: 700, color: mode === "counter" ? "var(--accent)" : "var(--text)", fontSize: "14px" }}>
+              Chamar direto para o guichê
+            </div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+              Pula a fila — vai direto para "Em Atendimento"
+            </div>
           </div>
         </button>
 
@@ -58,16 +62,19 @@ const RecallModal = ({ open, onClose, ticket, counters, onRecall }) => {
           className="btn"
           onClick={() => setMode("queue_front")}
           style={{
-            padding: "14px", textAlign: "left",
+            padding: "14px", textAlign: "left", display: "flex", alignItems: "flex-start", gap: "10px",
             border: `1px solid ${mode === "queue_front" ? "var(--accent)" : "var(--border)"}`,
-            background: mode === "queue_front" ? "var(--accent-glow)" : "var(--surface)",
+            background: mode === "queue_front" ? "var(--accent-light)" : "var(--surface)",
           }}
         >
-          <div style={{ fontWeight: 700, color: mode === "queue_front" ? "var(--accent)" : "var(--text)", fontSize: "14px" }}>
-            🔄 Voltar para o início da fila
-          </div>
-          <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
-            Respeita a prioridade original de "{ticket.category}"
+          <CornerUpLeft size={16} color={mode === "queue_front" ? "var(--accent)" : "var(--text-muted)"} style={{ marginTop: "2px", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontWeight: 700, color: mode === "queue_front" ? "var(--accent)" : "var(--text)", fontSize: "14px" }}>
+              Voltar para o início da fila
+            </div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+              Respeita a prioridade original de "{ticket.category}"
+            </div>
           </div>
         </button>
       </div>
@@ -84,14 +91,10 @@ const RecallModal = ({ open, onClose, ticket, counters, onRecall }) => {
       )}
 
       <div style={{ display: "flex", gap: "10px" }}>
-        <button className="btn" onClick={onClose} style={{ flex: 1, padding: "12px", background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+        <button className="btn" onClick={onClose} style={{ flex: 1, padding: "12px" }}>
           Cancelar
         </button>
-        <button
-          className="btn"
-          onClick={handleConfirm}
-          style={{ flex: 2, padding: "12px", background: "linear-gradient(135deg, var(--accent), #34d399)", color: "#022c22", fontWeight: 700 }}
-        >
+        <button className="btn btn-primary" onClick={handleConfirm} style={{ flex: 2, padding: "12px", fontWeight: 700 }}>
           Confirmar
         </button>
       </div>

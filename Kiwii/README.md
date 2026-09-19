@@ -1,4 +1,4 @@
-# ⚡ fila.io — Real-Time Queue Management SaaS
+# ⚡ Kiwii — Real-Time Queue Management SaaS
 
 MVP de gestão de filas em tempo real com Socket.io, React e Node.js.
 
