@@ -12,9 +12,9 @@
 services:
   # ── Backend: Node.js + Express + Socket.io ──────────────────────
   - type: web
-    name: fila-io-server
+    name: Kiwii-server
     runtime: node
-    rootDir: fila-io/server
+    rootDir: Kiwii/server
     plan: free
     buildCommand: npm install --omit=dev
     startCommand: npm start
@@ -50,9 +50,9 @@ services:
 
   # ── Frontend: React + Vite (site estático) ──────────────────────
   - type: web
-    name: fila-io-client
+    name: Kiwii-client
     runtime: static
-    rootDir: fila-io/client
+    rootDir: Kiwii/client
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:

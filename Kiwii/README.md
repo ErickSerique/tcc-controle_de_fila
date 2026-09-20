@@ -7,7 +7,7 @@ MVP de gestão de filas em tempo real com Socket.io, React e Node.js.
 ## Estrutura do Projeto
 
 ```
-queue-saas/
+Kiwii/
 ├── package.json                  ← root (npm workspaces + concurrently)
 ├── README.md
 │
