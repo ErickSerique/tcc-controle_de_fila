@@ -1,0 +1,136 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ─────────────────────────────────────────────────────────────
+   Kiwii — Design Tokens
+   Tema único (escuro). Paleta ancorada em painéis de senha físicos
+   reais: azul petróleo institucional como identidade, âmbar quente
+   reservado para o momento de chamada, verde só como sinal de sucesso.
+───────────────────────────────────────────────────────────── */
+:root {
+  --bg:            #0B1220;
+  --surface:       #111A2C;
+  --surface-hover: #182338;
+  --border:        #233047;
+
+  --accent:        #3E8FB0;
+  --accent-hover:  #56A8C9;
+  --accent-glow:   rgba(62, 143, 176, 0.18);
+  --accent-dim:    rgba(62, 143, 176, 0.4);
+  --accent-light:  rgba(62, 143, 176, 0.1);
+
+  --warn:          #E8A33D;
+  --warn-glow:     rgba(232, 163, 61, 0.18);
+  --danger:        #E5484D;
+  --danger-glow:   rgba(229, 72, 77, 0.16);
+  --success:       #3FB88A;
+  --success-glow:  rgba(63, 184, 138, 0.16);
+  --info:          #5B8DBE;
+  --purple:        #8B84B8;
+
+  --text:          #E7EDF5;
+  --text-muted:    #8B9AB0;
+  --text-dim:      #4C5A70;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.5), 0 2px 4px -2px rgba(0,0,0,0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.55), 0 4px 6px -4px rgba(0,0,0,0.35);
+  --ring: rgba(62, 143, 176, 0.35);
+}
+
+/* ─── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ─── Typography ─────────────────────────────────────────────── */
+.mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, Monaco, Consolas, monospace; }
+.display { font-family: 'Sora', 'Manrope', sans-serif; }
+
+h1 { font-family: 'Sora', sans-serif; font-size: 2.25rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+h2 { font-family: 'Sora', sans-serif; font-size: 1.75rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+h3 { font-family: 'Sora', sans-serif; font-size: 1.25rem; font-weight: 600; line-height: 1.3; }
+p  { color: var(--text-muted); }
+
+/* ─── Tag / Badge ────────────────────────────────────────────── */
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 9999px;
+  font-size: 0.7rem; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--accent-light); color: var(--accent);
+  border: 1px solid var(--accent-dim);
+}
+
+/* ─── Card ───────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  transition: border-color 0.25s ease;
+}
+
+/* ─── Button ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+  font-family: 'Manrope', inherit; font-weight: 600; font-size: 0.875rem;
+  padding: 9px 16px; border-radius: 10px;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+  outline: none;
+}
+.btn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--text-dim); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.btn-primary {
+  background: var(--accent); color: #04141C; border-color: var(--accent);
+}
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+/* ─── Input ──────────────────────────────────────────────────── */
+.input {
+  width: 100%;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  font-family: 'Manrope', inherit; border-radius: 10px;
+  padding: 11px 14px; font-size: 0.875rem; outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.input:hover { border-color: var(--text-dim); }
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.input::placeholder { color: var(--text-dim); }
+
+select.input {
+  cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238B9AB0'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 16px;
+  padding-right: 36px;
+}
+
+/* ─── Animations ─────────────────────────────────────────────── */
+/* Curva consistente para toda a interface — sem exagero de "float"/glow em todo canto. */
+@keyframes fadeIn    { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideIn   { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 24px 2px var(--warn-glow); } }
+@keyframes shake     { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes ringPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.4); } }
+
+.animate-fade  { animation: fadeIn  0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.animate-slide { animation: slideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.animate-glow  { animation: pulseGlow 2.4s ease-in-out infinite; }
+.animate-shake { animation: shake 0.4s ease; }
