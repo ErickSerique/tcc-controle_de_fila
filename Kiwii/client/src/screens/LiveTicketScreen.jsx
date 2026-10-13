@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Bell, CheckCircle2, XCircle, LogOut, DoorOpen } from "lucide-react";
 import socket from "../lib/socket";
 import ConfirmModal from "../components/ConfirmModal";
 
@@ -24,9 +25,7 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
       socket.emit("client:join", { roomCode: room.code, token: initialTicket.token });
     };
 
-    if (socket.connected) {
-      joinRoom();
-    }
+    if (socket.connected) joinRoom();
     socket.on("connect", joinRoom);
 
     const handleQueueUpdate = ({ roomCode, queue }) => {
@@ -54,12 +53,6 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
       setTimeout(() => setShaking(false), 600);
     };
 
-    // Resposta ao "client:join": o servidor manda o status REAL do ticket,
-    // buscando tanto na fila ativa quanto no arquivo do dia. É o que permite
-    // restaurar a tela corretamente após uma reconexão/F5 — inclusive quando
-    // o ticket já foi chamado, atendido, removido ou saiu voluntariamente,
-    // casos em que ele não está mais em `queue` e por isso não apareceria
-    // em nenhum `queue_update` normal.
     const handleTicketStatus = ({ ticket: statusTicket }) => {
       if (!statusTicket) return;
 
@@ -74,7 +67,6 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
         return;
       }
 
-      // status === "waiting" — restaura a posição real (não a congelada no sessionStorage)
       prevPositionRef.current = statusTicket.position;
       const ahead = statusTicket.position ? statusTicket.position - 1 : 0;
       setAheadInCategory(ahead);
@@ -110,21 +102,9 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
   const ticketCode = initialTicket.token.split("-").slice(-1)[0].toUpperCase();
 
   const TERMINAL_INFO = {
-    served: {
-      icon: "✅",
-      title: "Atendimento concluído",
-      message: `Sua senha #${ticketCode} já foi atendida. Obrigado!`,
-    },
-    removed_by_host: {
-      icon: "❌",
-      title: "Você foi removido da fila",
-      message: `Sua senha #${ticketCode} foi removida pelo atendente.`,
-    },
-    left_voluntarily: {
-      icon: "👋",
-      title: "Você saiu da fila",
-      message: `Sua senha #${ticketCode} foi cancelada.`,
-    },
+    served: { Icon: CheckCircle2, color: "var(--success)", title: "Atendimento concluído", message: `Sua senha #${ticketCode} já foi atendida. Obrigado!` },
+    removed_by_host: { Icon: XCircle, color: "var(--danger)", title: "Você foi removido da fila", message: `Sua senha #${ticketCode} foi removida pelo atendente.` },
+    left_voluntarily: { Icon: LogOut, color: "var(--text-muted)", title: "Você saiu da fila", message: `Sua senha #${ticketCode} foi cancelada.` },
   };
 
   // ── Estado terminal (atendido / removido / saiu voluntariamente) ─
@@ -132,30 +112,34 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
     const info = TERMINAL_INFO[terminalStatus];
     return (
       <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", textAlign: "center" }}>
-        <div style={{ fontSize: "64px", marginBottom: "20px" }}>{info.icon}</div>
-        <h2 style={{ fontSize: "24px", fontWeight: 800, marginBottom: "8px" }}>{info.title}</h2>
+        <div style={{ width: 72, height: 72, borderRadius: "50%", background: "var(--surface)", border: `1px solid ${info.color}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "24px" }}>
+          <info.Icon size={32} color={info.color} />
+        </div>
+        <h2 style={{ marginBottom: "8px" }}>{info.title}</h2>
         <p style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "32px" }}>{info.message}</p>
-        <button className="btn" onClick={onBack} style={{ padding: "14px 32px", background: "linear-gradient(135deg, var(--accent), #34d399)", color: "#022c22", borderRadius: "12px", fontSize: "15px", fontWeight: 700 }}>
+        <button className="btn btn-primary" onClick={onBack} style={{ padding: "13px 32px", fontSize: "15px" }}>
           Voltar ao Início
         </button>
       </div>
     );
   }
 
-  // ── Chamado ────────────────────────────────────────────────────────
+  // ── Chamado — único momento com destaque forte (âmbar), por design ──
   if (isCalled) {
     return (
       <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 100% 100% at 50% 50%, rgba(110,231,183,0.25) 0%, transparent 65%)" }} />
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 100% 100% at 50% 50%, var(--warn-glow) 0%, transparent 65%)" }} />
         <div className={`animate-fade ${shaking ? "animate-shake" : ""}`} style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
-          <div className="animate-float" style={{ fontSize: "80px", marginBottom: "20px" }}>🔔</div>
-          <h1 className="animate-glow" style={{ fontSize: "40px", fontWeight: 800, color: "var(--accent)", letterSpacing: "-0.02em", marginBottom: "10px" }}>É SUA VEZ!</h1>
+          <div style={{ width: 88, height: 88, borderRadius: "50%", background: "var(--warn-glow)", border: "1px solid var(--warn)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
+            <Bell size={38} color="var(--warn)" className="animate-glow" />
+          </div>
+          <h1 className="display" style={{ fontSize: "2.5rem", color: "var(--warn)", letterSpacing: "-0.02em", marginBottom: "10px" }}>É SUA VEZ</h1>
           <p style={{ fontSize: "18px", color: "var(--text)", marginBottom: "6px" }}>Dirija-se agora a:</p>
-          <p style={{ fontSize: "26px", fontWeight: 800, color: "var(--purple)", marginBottom: "6px" }}>{ticket.counter || "Guichê"}</p>
+          <p className="display" style={{ fontSize: "28px", fontWeight: 700, color: "var(--warn)", marginBottom: "6px" }}>{ticket.counter || "Guichê"}</p>
           <p className="mono" style={{ fontSize: "13px", color: "var(--text-muted)" }}>{room.name}</p>
-          <div className="card" style={{ marginTop: "32px", padding: "16px 32px", display: "inline-block", borderColor: "var(--accent-dim)", background: "var(--accent-glow)" }}>
+          <div className="card" style={{ marginTop: "32px", padding: "16px 32px", display: "inline-block", borderColor: "var(--warn)" }}>
             <div className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>SENHA</div>
-            <div className="mono" style={{ fontSize: "36px", fontWeight: 700, color: "var(--accent)", letterSpacing: "0.1em" }}>#{ticketCode}</div>
+            <div className="mono" style={{ fontSize: "36px", fontWeight: 700, color: "var(--warn)", letterSpacing: "0.1em" }}>#{ticketCode}</div>
           </div>
         </div>
       </div>
@@ -169,28 +153,27 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
 
       <div className={`animate-fade ${shaking ? "animate-shake" : ""}`} style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: "360px", textAlign: "center" }}>
         <p className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "28px" }}>
-          fila.io · {room.name}
+          Kiwii · {room.name}
         </p>
 
         <div style={{ marginBottom: "24px" }}>
           <div className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", letterSpacing: "0.1em", marginBottom: "8px" }}>SENHA</div>
-          <div className={`mono ${isNext ? "animate-glow" : ""}`} style={{ fontSize: "58px", fontWeight: 800, letterSpacing: "0.05em", color: isNext ? "var(--accent)" : "var(--text)", transition: "color 0.5s" }}>
+          <div className="mono" style={{ fontSize: "58px", fontWeight: 800, letterSpacing: "0.05em", color: isNext ? "var(--accent)" : "var(--text)", transition: "color 0.5s" }}>
             #{ticketCode}
           </div>
         </div>
 
-        <div className={`card ${isNext ? "animate-next" : ""}`} style={{ padding: "26px 24px", marginBottom: "14px", border: `1px solid ${isNext ? "var(--accent)" : "var(--border)"}`, transition: "border-color 0.5s" }}>
+        <div className="card" style={{ padding: "26px 24px", marginBottom: "14px", border: `1px solid ${isNext ? "var(--accent)" : "var(--border)"}`, transition: "border-color 0.5s" }}>
           <div className="mono" style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>Posição na Fila</div>
-          <div className={`mono ${isNext ? "animate-glow" : ""}`} style={{ fontSize: "72px", fontWeight: 800, lineHeight: 1, color: isNext ? "var(--accent)" : "var(--text)", transition: "color 0.5s" }}>
+          <div className="mono" style={{ fontSize: "72px", fontWeight: 800, lineHeight: 1, color: isNext ? "var(--accent)" : "var(--text)", transition: "color 0.5s" }}>
             {ticket.position}º
           </div>
 
-          {/* Barra de progresso visual */}
           <div style={{ marginTop: "16px", height: "6px", background: "var(--border)", borderRadius: "999px", overflow: "hidden" }}>
             <div style={{
               height: "100%",
               width: `${Math.max(8, 100 - Math.min(90, (ticket.position - 1) * 12))}%`,
-              background: isNext ? "var(--accent)" : "var(--purple)",
+              background: isNext ? "var(--accent)" : "var(--info)",
               transition: "width 0.6s ease",
             }} />
           </div>
@@ -214,7 +197,7 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
           </div>
           <div className="card" style={{ padding: "14px", textAlign: "center" }}>
             <div className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase" }}>Serviço</div>
-            <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--purple)" }}>{ticket.category}</div>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--info)" }}>{ticket.category}</div>
           </div>
         </div>
 
@@ -222,12 +205,8 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
           Não feche esta tela<br />Você será notificado aqui
         </p>
 
-        <button
-          className="btn"
-          onClick={() => setShowLeaveConfirm(true)}
-          style={{ background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", padding: "10px 22px", borderRadius: "8px", fontSize: "12px" }}
-        >
-          🚪 Sair da Fila
+        <button className="btn" onClick={() => setShowLeaveConfirm(true)} style={{ color: "var(--text-dim)", padding: "10px 22px", fontSize: "12px" }}>
+          <DoorOpen size={14} /> Sair da Fila
         </button>
       </div>
 
