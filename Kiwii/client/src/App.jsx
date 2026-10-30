@@ -82,6 +82,7 @@ export default function App() {
           <HostSetupScreen
             onRoomCreated={(code, room) => navigate("host-panel", { roomCode: code, room })}
             onBack={() => navigate("landing")}
+            onNeedOrg={() => navigate("org-setup")}
           />
         );
 

@@ -52,12 +52,15 @@ const recalcPositions = (queue) => {
 
 // ── Service API ────────────────────────────────────────────────
 
-const createRoom = ({ name, hostId, categories, counters, customFields, actor }) => {
+const createRoom = ({ name, hostId, orgId, categories, counters, customFields, actor }) => {
   const code = generateCode();
   const room = {
     code,
     name,
     hostId,
+    orgId, // Sala ainda vive só em memória (a persistência em Postgres é a fase
+           // seguinte), mas o vínculo com a organização já é real — usado para
+           // verificar a role do host via Socket.io (ver socket/handlers.js).
     categories,
     counters: counters?.length ? counters : DEFAULT_COUNTERS,
     customFields: customFields || [],
@@ -104,6 +107,7 @@ const closeDay = (code, actor) => {
 
   const report = {
     id: uuidv4(),
+    orgId: room.orgId,
     roomCode: room.code,
     roomName: room.name,
     date: new Date().toISOString(),
@@ -125,8 +129,11 @@ const closeDay = (code, actor) => {
   return report;
 };
 
-const getHistory = () =>
-  [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
+/** Filtra por organização — sem isso, uma org veria o histórico de outra. */
+const getHistory = (orgId) =>
+  [...history]
+    .filter((h) => h.orgId === orgId)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
 
 const getHistorySession = (sessionId) =>
   history.find((h) => h.id === sessionId) ?? null;

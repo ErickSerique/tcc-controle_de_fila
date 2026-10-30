@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import socket from "../lib/socket";
 import { apiFetch } from "../lib/api";
+import { useAuth } from "../hooks/useAuth";
 import QRDisplay from "../components/QRDisplay";
 import Modal from "../components/Modal";
 import RecallModal from "../components/RecallModal";
@@ -26,17 +27,12 @@ const STATUS_BADGE = {
   left_voluntarily: { label: "Saiu",     Icon: RotateCcw, color: "var(--warn)",    bg: "var(--warn-glow)" },
 };
 
-/** Lê a identidade do operador salva pelo HostSetupScreen. */
-const getStaffIdentity = () => {
-  try {
-    return JSON.parse(sessionStorage.getItem("staff_identity")) || { name: "Operador", role: "operator" };
-  } catch {
-    return { name: "Operador", role: "operator" };
-  }
-};
-
 const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
-  const staff = getStaffIdentity();
+  const { user, activeOrg } = useAuth();
+  const staff = {
+    name: user?.profile?.name ?? user?.email ?? "Operador",
+    role: activeOrg?.role ?? "operator",
+  };
   const canViewLogs = staff.role === "owner" || staff.role === "admin";
 
   const [queue, setQueue] = useState([]);
@@ -61,8 +57,12 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   // ── Socket ──────────────────────────────────────────────────
   useEffect(() => {
+    // O socket só carrega o token depois que a sessão é restaurada (connectWithAuth).
+    // Sem token o servidor recusaria o join, então espera: a reconexão autenticada
+    // dispara "connect" de novo e o join acontece nela.
     const joinRoom = () => {
-      socket.emit("host:join", { roomCode, actorName: staff.name, actorRole: staff.role });
+      if (!socket.auth?.token) return;
+      socket.emit("host:join", { roomCode });
     };
 
     if (socket.connected) joinRoom();
@@ -87,7 +87,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
       socket.off("error", handleSocketError);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode]);
+  }, [roomCode, user?.id]);
 
   // ── Ações ───────────────────────────────────────────────────
   const callNext = () => {
@@ -120,7 +120,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   const fetchLogs = async () => {
     try {
-      const data = await apiFetch(`/api/rooms/${roomCode}/logs`, { headers: { "X-Actor-Role": staff.role } });
+      const data = await apiFetch(`/api/rooms/${roomCode}/logs`, { orgId: activeOrg?.id });
       setLogs(data.logs);
       setLogsModalOpen(true);
     } catch (err) {
@@ -130,7 +130,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   const fetchHistory = async () => {
     try {
-      const data = await apiFetch("/api/rooms/meta/history");
+      const data = await apiFetch("/api/rooms/meta/history", { orgId: activeOrg?.id });
       setHistoryData(data.history || []);
       setHistoryModalOpen(true);
     } catch (err) {
@@ -144,7 +144,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
     try {
       const data = await apiFetch(`/api/rooms/${roomCode}/close`, {
         method: "POST",
-        headers: { "X-Actor-Name": staff.name, "X-Actor-Role": staff.role },
+        orgId: activeOrg?.id,
       });
       setReport(data.report);
       setCloseDayModal(true);

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, User, X, AlertTriangle, Loader2, Plus } from "lucide-react";
 import { apiFetch } from "../lib/api";
+import { useAuth } from "../hooks/useAuth";
 
 const PRIORITY_OPTIONS = [
   { value: 3, label: "Alta", color: "var(--danger)" },
@@ -8,11 +9,7 @@ const PRIORITY_OPTIONS = [
   { value: 1, label: "Baixa", color: "var(--success)" },
 ];
 
-const STAFF_ROLES = [
-  { value: "owner", label: "Owner (Dono)" },
-  { value: "admin", label: "Admin" },
-  { value: "operator", label: "Operador" },
-];
+const ROLE_LABELS = { owner: "Owner", admin: "Admin", operator: "Operador" };
 
 const FIELD_TYPES = [
   { value: "text", label: "Texto" },
@@ -29,9 +26,9 @@ const PriorityDot = ({ color }) => (
   <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
 );
 
-const HostSetupScreen = ({ onRoomCreated, onBack }) => {
-  const [staffName, setStaffName] = useState("");
-  const [staffRole, setStaffRole] = useState("owner");
+const HostSetupScreen = ({ onRoomCreated, onBack, onNeedOrg }) => {
+  const { user, activeOrg, loading: authLoading } = useAuth();
+  const operatorName = user?.profile?.name ?? user?.email ?? "";
   const [roomName, setRoomName] = useState("");
 
   const [categories, setCategories] = useState([
@@ -85,8 +82,13 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
   };
   const removeField = (id) => setCustomFields(customFields.filter((f) => f.id !== id));
 
+  // Sem organização ativa não dá para criar sala: leva para criar/escolher uma.
+  useEffect(() => {
+    if (!authLoading && !activeOrg) onNeedOrg?.();
+  }, [authLoading, activeOrg, onNeedOrg]);
+
   const createRoom = async () => {
-    if (!staffName.trim()) { setError("Informe seu nome (operador responsável)."); return; }
+    if (!activeOrg) { setError("Selecione ou crie uma organização antes de criar uma sala."); return; }
     if (!roomName.trim()) { setError("Nome da sala é obrigatório."); return; }
     if (categories.length === 0) { setError("Adicione ao menos uma categoria."); return; }
     if (counters.length === 0) { setError("Adicione ao menos um guichê."); return; }
@@ -96,14 +98,10 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
     try {
       const data = await apiFetch("/api/rooms", {
         method: "POST",
-        headers: {
-          "X-Actor-Name": staffName.trim(),
-          "X-Actor-Role": staffRole,
-        },
+        orgId: activeOrg.id,
         body: JSON.stringify({ name: roomName.trim(), categories, counters, customFields }),
       });
 
-      sessionStorage.setItem("staff_identity", JSON.stringify({ name: staffName.trim(), role: staffRole }));
       onRoomCreated(data.code, data.room);
     } catch (err) {
       setError(err.message);
@@ -133,28 +131,21 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
           </p>
         </div>
 
-        {/* Identificação do operador */}
+        {/* Quem está operando — vem da conta logada, não é mais digitado */}
         <div className="card" style={{ padding: "18px", marginBottom: "24px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
             <User size={15} color="var(--text-muted)" />
             <p className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Identificação do Operador
+              Operando como
             </p>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: "10px" }}>
-            <div>
-              <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Seu Nome</label>
-              <input className="input" placeholder="ex: Maria Silva" value={staffName} onChange={(e) => { setStaffName(e.target.value); setError(""); }} />
-            </div>
-            <div>
-              <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Cargo</label>
-              <select className="input" value={staffRole} onChange={(e) => setStaffRole(e.target.value)}>
-                {STAFF_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 600, fontSize: "14px" }}>{operatorName}</span>
+            {activeOrg && <span className="tag">{ROLE_LABELS[activeOrg.role] ?? activeOrg.role}</span>}
+            {activeOrg && <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{activeOrg.name}</span>}
           </div>
           <p style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "10px" }}>
-            Usado nos logs de auditoria — apenas Owner/Admin podem visualizá-los depois.
+            Suas ações ficam registradas nos logs de auditoria, visíveis apenas para Owner/Admin.
           </p>
         </div>
 

@@ -56,15 +56,15 @@ const verifyLocalSession = (token) => {
 // ── Middleware principal ──────────────────────────────────────────
 
 /**
- * Verifica o Bearer token (Supabase ou JWT local) e carrega o perfil.
+ * Verifica um Bearer token (Supabase ou JWT local) e carrega o perfil.
+ * Extraído do requireAuth para ser reutilizável fora do contexto REST —
+ * o handshake do Socket.io usa exatamente a mesma função, para não
+ * duplicar (e possivelmente divergir) a lógica de fallback offline.
+ *
+ * Lança erro se o token for inválido/expirado em ambos os modos.
+ * Retorna { user, profile, authMode }.
  */
-const requireAuth = async (req, res, next) => {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Token de autenticação ausente." });
-  }
-
-  const accessToken = auth.split(" ")[1];
+const verifyToken = async (accessToken) => {
   let user = null;
   let authMode = "supabase";
 
@@ -77,29 +77,58 @@ const requireAuth = async (req, res, next) => {
       user = verifyLocalSession(accessToken);
       authMode = "local";
     } catch {
-      // Ambos falharam
-      return res.status(401).json({ error: "Token inválido ou expirado." });
+      throw new Error("Token inválido ou expirado.");
     }
   }
 
-  req.user = user;
-  req.authMode = authMode;
-
-  // Carrega perfil adicional
+  // Carrega perfil adicional — não é fatal se falhar (opera só com o token)
+  let profile = null;
   try {
     const { rows } = await pool.query(
       "SELECT * FROM user_profiles WHERE id = $1",
       [user.id]
     );
-    req.profile = rows[0] ?? null;
+    profile = rows[0] ?? null;
   } catch (dbErr) {
-    // Se o banco local também falhou, ainda assim permite operar
-    // com as informações do token
     console.warn("[auth] Falha ao carregar perfil:", dbErr.message);
-    req.profile = null;
   }
 
-  next();
+  return { user, profile, authMode };
+};
+
+/**
+ * Middleware REST: exige um Bearer token válido no header Authorization.
+ */
+const requireAuth = async (req, res, next) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Token de autenticação ausente." });
+  }
+
+  try {
+    const { user, profile, authMode } = await verifyToken(auth.split(" ")[1]);
+    req.user = user;
+    req.profile = profile;
+    req.authMode = authMode;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Token inválido ou expirado." });
+  }
+};
+
+/**
+ * Verifica a role de um usuário já autenticado dentro de uma organização
+ * específica. Extraído para ser reutilizável fora do requireRole (REST) —
+ * o Socket.io usa isso para checar a role do host contra a organização
+ * dona da sala, em vez de um X-Org-Id alegado pelo cliente.
+ */
+const getOrgRole = async (userId, orgId) => {
+  const { rows } = await pool.query(
+    `SELECT role FROM org_members
+     WHERE org_id = $1 AND user_id = $2 AND accepted_at IS NOT NULL`,
+    [orgId, userId]
+  );
+  return rows[0]?.role ?? null;
 };
 
 // ── Role check ───────────────────────────────────────────────────
@@ -121,17 +150,12 @@ const requireRole = (minRole = "operator") => async (req, res, next) => {
   req.orgId = orgId;
 
   try {
-    const { rows } = await pool.query(
-      `SELECT role FROM org_members
-       WHERE org_id = $1 AND user_id = $2 AND accepted_at IS NOT NULL`,
-      [orgId, req.user.id]
-    );
+    const userRole = await getOrgRole(req.user.id, orgId);
 
-    if (rows.length === 0) {
+    if (!userRole) {
       return res.status(403).json({ error: "Acesso negado: você não é membro desta organização." });
     }
 
-    const userRole = rows[0].role;
     req.orgRole = userRole;
 
     if (ROLE_LEVEL[userRole] < ROLE_LEVEL[minRole]) {
@@ -147,4 +171,4 @@ const requireRole = (minRole = "operator") => async (req, res, next) => {
   }
 };
 
-module.exports = { requireAuth, requireRole, issueLocalSession, verifyLocalSession };
+module.exports = { requireAuth, requireRole, verifyToken, getOrgRole, issueLocalSession, verifyLocalSession, ROLE_LEVEL };
