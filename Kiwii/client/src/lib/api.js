@@ -111,6 +111,16 @@ export const updateOrg = (orgId, data) =>
 export const deleteOrg = (orgId) =>
   apiFetch(`/api/orgs/${orgId}`, { orgId, method: "DELETE" });
 
+export const fetchQueueTemplate = (orgId) =>
+  apiFetch(`/api/orgs/${orgId}/queue-template`, { orgId });
+
+export const saveQueueTemplate = (orgId, categories) =>
+  apiFetch(`/api/orgs/${orgId}/queue-template`, {
+    orgId,
+    method: "PUT",
+    body: JSON.stringify({ categories }),
+  });
+
 // ── Rooms ─────────────────────────────────────────────────────────
 export const createRoom = (orgId, data) =>
   apiFetch("/api/rooms", { orgId, method: "POST", body: JSON.stringify(data) });
@@ -124,9 +134,12 @@ export const closeDay = (orgId, code) =>
 
 export const fetchHistory = (orgId) => apiFetch("/api/rooms/history", { orgId });
 
+export const fetchSessionReport = (orgId, reportId) =>
+  apiFetch(`/api/rooms/history/${reportId}`, { orgId });
+
 // ── Queue ─────────────────────────────────────────────────────────
-export const joinQueue = (roomCode, name, category) =>
+export const joinQueue = (roomCode, name, category, customData) =>
   apiFetch("/api/queue/join", {
     method: "POST",
-    body: JSON.stringify({ roomCode, name, category }),
+    body: JSON.stringify({ roomCode, name, category, customData }),
   });

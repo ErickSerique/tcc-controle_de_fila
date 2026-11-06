@@ -1,27 +1,38 @@
 /**
  * screens/MembersScreen.jsx
  *
- * Gerenciamento de membros da organização.
- * Acessível por: admin, owner
+ * Gerenciamento de membros da organização — Design System v3.0
+ * Zero emojis e com ConfirmModal customizado.
  */
 import { useState, useEffect } from "react";
-import { ArrowLeft, AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { fetchOrgMembers, inviteMember, updateMemberRole, removeMember } from "../lib/api";
+import ConfirmModal from "../components/ConfirmModal";
+import {
+  ArrowLeft,
+  Users,
+  UserPlus,
+  Trash2,
+  AlertCircle,
+  Check,
+  Shield,
+  ShieldCheck,
+  User,
+} from "lucide-react";
 
-const ROLE_LABELS = { owner: "Owner", admin: "Admin", operator: "Operador" };
-const ROLE_COLORS = { owner: "var(--accent)", admin: "var(--warn)", operator: "var(--text-muted)" };
+const ROLE_LABELS = { owner: "Proprietário", admin: "Administrador", operator: "Operador" };
 
 const MembersScreen = ({ onBack }) => {
   const { activeOrg, user } = useAuth();
 
-  const [members, setMembers]         = useState([]);
-  const [loading, setLoading]         = useState(true);
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole,  setInviteRole]  = useState("operator");
-  const [inviting,    setInviting]    = useState(false);
-  const [inviteOk,    setInviteOk]    = useState("");
-  const [error,       setError]       = useState("");
+  const [inviteRole, setInviteRole] = useState("operator");
+  const [inviting, setInviting] = useState(false);
+  const [inviteOk, setInviteOk] = useState("");
+  const [error, setError] = useState("");
+  const [removeTarget, setRemoveTarget] = useState(null);
 
   const canManage = ["admin", "owner"].includes(activeOrg?.role);
 
@@ -38,14 +49,16 @@ const MembersScreen = ({ onBack }) => {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(inviteEmail)) {
-      setError("Por favor, informe um e-mail válido.");
+      setError("Por favor, informe um endereço de e-mail válido.");
       return;
     }
 
-    setInviting(true); setError(""); setInviteOk("");
+    setInviting(true);
+    setError("");
+    setInviteOk("");
     try {
       await inviteMember(activeOrg.id, inviteEmail, inviteRole);
-      setInviteOk(`Convite enviado para ${inviteEmail}`);
+      setInviteOk(`Convite enviado com sucesso para ${inviteEmail}`);
       setInviteEmail("");
     } catch (err) {
       setError(err.message);
@@ -57,120 +70,364 @@ const MembersScreen = ({ onBack }) => {
   const handleRoleChange = async (userId, newRole) => {
     try {
       await updateMemberRole(activeOrg.id, userId, newRole);
-      setMembers((m) => m.map((mb) => mb.user_id === userId ? { ...mb, role: newRole } : mb));
+      setMembers((m) =>
+        m.map((mb) => (mb.user_id === userId ? { ...mb, role: newRole } : mb))
+      );
     } catch (err) {
       setError(err.message);
     }
   };
 
-  const handleRemove = async (userId, memberName) => {
-    if (!confirm(`Remover ${memberName} da organização?`)) return;
+  const confirmRemoveMember = async () => {
+    if (!removeTarget) return;
     try {
-      await removeMember(activeOrg.id, userId);
-      setMembers((m) => m.filter((mb) => mb.user_id !== userId));
+      await removeMember(activeOrg.id, removeTarget.user_id);
+      setMembers((m) => m.filter((mb) => mb.user_id !== removeTarget.user_id));
     } catch (err) {
       setError(err.message);
+    } finally {
+      setRemoveTarget(null);
     }
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", padding: "24px", maxWidth: "640px", margin: "0 auto" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--bg)",
+        padding: "32px 24px",
+        maxWidth: "680px",
+        margin: "0 auto",
+      }}
+    >
       <div className="animate-fade">
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "28px", paddingTop: "8px" }}>
-          <button className="btn" onClick={onBack} style={{ padding: "8px 14px", fontSize: "13px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "14px",
+            marginBottom: "28px",
+          }}
+        >
+          <button
+            className="btn btn-secondary"
+            onClick={onBack}
+            style={{ padding: "8px 12px", fontSize: "12px", gap: "6px" }}
+          >
             <ArrowLeft size={14} /> Voltar
           </button>
           <div>
-            <h2 style={{ fontSize: "1.25rem", marginBottom: "2px" }}>Membros</h2>
-            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>{activeOrg?.name}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <Users size={18} style={{ color: "var(--primary)" }} />
+              <h2 style={{ fontSize: "20px", fontWeight: 700, margin: 0 }}>
+                Membros da Equipe
+              </h2>
+            </div>
+            <p
+              style={{
+                fontSize: "13px",
+                color: "var(--text-secondary)",
+                margin: "2px 0 0",
+              }}
+            >
+              {activeOrg?.name}
+            </p>
           </div>
         </div>
 
         {/* Convidar membro */}
         {canManage && (
-          <div className="card" style={{ padding: "20px", marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "14px", marginBottom: "14px" }}>Convidar Membro</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "10px", alignItems: "end" }}>
-              <input
-                className="input"
-                type="email"
-                placeholder="E-mail do convidado"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleInvite()}
-              />
-              <select className="input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} style={{ width: "auto" }}>
-                <option value="operator">Operador</option>
-                <option value="admin">Admin</option>
-              </select>
-              <button className="btn btn-primary" onClick={handleInvite} disabled={inviting || !inviteEmail}>
-                {inviting ? "..." : "Convidar"}
+          <div
+            className="card"
+            style={{
+              padding: "20px",
+              marginBottom: "24px",
+              background: "var(--surface)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                marginBottom: "14px",
+              }}
+            >
+              <UserPlus size={16} style={{ color: "var(--primary)" }} />
+              <h3 style={{ fontSize: "14px", fontWeight: 700, margin: 0 }}>
+                Convidar Novo Membro
+              </h3>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto",
+                gap: "10px",
+                alignItems: "end",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
+                    display: "block",
+                    marginBottom: "6px",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  E-mail institucional
+                </label>
+                <input
+                  className="input"
+                  type="email"
+                  placeholder="colega@clinica.com"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleInvite()}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
+                    display: "block",
+                    marginBottom: "6px",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Função
+                </label>
+                <select
+                  className="input"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
+                  style={{ width: "auto" }}
+                >
+                  <option value="operator">Operador</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={handleInvite}
+                disabled={inviting || !inviteEmail}
+                style={{ padding: "10px 16px", fontSize: "13px" }}
+              >
+                {inviting ? "Enviando..." : "Enviar Convite"}
               </button>
             </div>
             {inviteOk && (
-              <p style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--success)", fontSize: "13px", marginTop: "8px" }}>
-                <CheckCircle2 size={14} /> {inviteOk}
-              </p>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  color: "var(--success)",
+                  fontSize: "13px",
+                  marginTop: "12px",
+                  background: "var(--success-muted)",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--success-border)",
+                }}
+              >
+                <Check size={15} />
+                <span>{inviteOk}</span>
+              </div>
             )}
           </div>
         )}
 
         {error && (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--danger)", fontSize: "13px", marginBottom: "14px", padding: "10px 14px", background: "var(--danger-glow)", borderRadius: "8px" }}>
-            <AlertTriangle size={14} /> {error}
+          <div
+            style={{
+              color: "var(--danger)",
+              fontSize: "13px",
+              marginBottom: "16px",
+              padding: "10px 14px",
+              background: "var(--danger-muted)",
+              borderRadius: "8px",
+              border: "1px solid var(--danger-border)",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <AlertCircle size={15} />
+            <span>{error}</span>
           </div>
         )}
 
         {/* Lista de membros */}
-        <div className="card" style={{ overflow: "hidden", padding: 0 }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+        <div
+          className="card"
+          style={{ overflow: "hidden", padding: 0, background: "var(--surface)" }}
+        >
+          <div
+            style={{
+              padding: "16px 20px",
+              borderBottom: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <span style={{ fontWeight: 700, fontSize: "14px" }}>
-              {members.length} membro{members.length !== 1 ? "s" : ""}
+              Membros Ativos ({members.length})
             </span>
           </div>
 
           {loading ? (
-            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Carregando...</div>
+            <div
+              style={{
+                padding: "40px",
+                textAlign: "center",
+                color: "var(--text-secondary)",
+                fontSize: "13px",
+              }}
+            >
+              Carregando membros...
+            </div>
           ) : (
             members.map((m, i) => (
-              <div key={m.user_id} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 20px", borderBottom: i < members.length - 1 ? "1px solid var(--border)" : "none" }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: "50%",
-                  background: "var(--accent-light)", border: "1px solid var(--accent-dim)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "15px", fontWeight: 700, color: "var(--accent)", flexShrink: 0,
-                }}>
-                  {m.name?.charAt(0).toUpperCase()}
+              <div
+                key={m.user_id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "14px",
+                  padding: "14px 20px",
+                  borderBottom:
+                    i < members.length - 1 ? "1px solid var(--border)" : "none",
+                }}
+              >
+                {/* Avatar minimalista */}
+                <div
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: "8px",
+                    background: "var(--surface-alt)",
+                    border: "1px solid var(--border)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    color: "var(--primary)",
+                    flexShrink: 0,
+                  }}
+                >
+                  {m.name ? m.name.charAt(0).toUpperCase() : <User size={16} />}
                 </div>
 
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: "14px" }}>
-                    {m.name}
+                  <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--text)" }}>
+                    {m.name || m.email}
                     {m.user_id === user?.id && (
-                      <span className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "8px" }}>(você)</span>
+                      <span
+                        className="tag"
+                        style={{
+                          fontSize: "10px",
+                          marginLeft: "8px",
+                          background: "var(--primary-muted)",
+                          color: "var(--primary)",
+                          borderColor: "var(--primary-border)",
+                        }}
+                      >
+                        você
+                      </span>
                     )}
                   </div>
+                  {m.email && m.name && (
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                      {m.email}
+                    </div>
+                  )}
                 </div>
 
+                {/* Role selector ou badge */}
                 {canManage && m.user_id !== user?.id && m.role !== "owner" ? (
-                  <select className="input" value={m.role} onChange={(e) => handleRoleChange(m.user_id, e.target.value)} style={{ width: "auto", fontSize: "12px", padding: "6px 10px" }}>
+                  <select
+                    className="input"
+                    value={m.role}
+                    onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
+                    style={{ width: "auto", fontSize: "12px", padding: "6px 10px" }}
+                  >
                     <option value="operator">Operador</option>
-                    <option value="admin">Admin</option>
+                    <option value="admin">Administrador</option>
                   </select>
                 ) : (
-                  <span className="tag" style={{ color: ROLE_COLORS[m.role] }}>{ROLE_LABELS[m.role]}</span>
+                  <span
+                    className="tag"
+                    style={{
+                      fontSize: "11px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      borderColor:
+                        m.role === "owner"
+                          ? "var(--primary-border)"
+                          : m.role === "admin"
+                          ? "var(--accent-border)"
+                          : "var(--border)",
+                      color:
+                        m.role === "owner"
+                          ? "var(--primary)"
+                          : m.role === "admin"
+                          ? "var(--accent)"
+                          : "var(--text-secondary)",
+                    }}
+                  >
+                    {ROLE_LABELS[m.role] || m.role}
+                  </span>
                 )}
 
+                {/* Remover membro */}
                 {canManage && m.user_id !== user?.id && m.role !== "owner" && (
-                  <button className="btn" onClick={() => handleRemove(m.user_id, m.name)} style={{ padding: "6px", color: "var(--danger)", background: "transparent", border: "none" }} aria-label="Remover membro">
-                    <X size={15} />
+                  <button
+                    onClick={() => setRemoveTarget(m)}
+                    style={{
+                      padding: "8px",
+                      color: "var(--text-dim)",
+                      background: "transparent",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      display: "flex",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = "var(--danger)";
+                      e.currentTarget.style.background = "var(--danger-muted)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = "var(--text-dim)";
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                    title="Remover membro"
+                  >
+                    <Trash2 size={14} />
                   </button>
                 )}
               </div>
             ))
           )}
         </div>
+
+        {/* Modal de confirmação para remoção */}
+        <ConfirmModal
+          open={!!removeTarget}
+          onClose={() => setRemoveTarget(null)}
+          onConfirm={confirmRemoveMember}
+          title="Remover Membro"
+          message={`Tem certeza que deseja remover ${removeTarget?.name || "este membro"} da organização? O usuário perderá acesso a todas as salas.`}
+          confirmText="Remover Membro"
+          danger
+        />
       </div>
     </div>
   );

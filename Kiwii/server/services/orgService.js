@@ -220,6 +220,80 @@ const acceptInvite = async (token, userId) => {
   }
 };
 
+// ── Modelos de Fila Persistentes por Instituição (M2) ────────────
+const memTemplateCache = new Map();
+
+const getQueueTemplate = async (orgId) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT categories, updated_at FROM org_queue_templates WHERE org_id = $1`,
+      [orgId]
+    );
+    if (rows[0]?.categories) {
+      return typeof rows[0].categories === "string"
+        ? JSON.parse(rows[0].categories)
+        : rows[0].categories;
+    }
+  } catch (err) {
+    if (err.code !== "42P01") {
+      console.warn("[orgService] getQueueTemplate DB fallback:", err.message);
+    }
+  }
+
+  if (memTemplateCache.has(orgId)) {
+    return memTemplateCache.get(orgId);
+  }
+
+  // Fallback: busca da última sala criada pela organização
+  try {
+    const { rows: roomRows } = await pool.query(
+      `SELECT categories FROM rooms WHERE org_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [orgId]
+    );
+    if (roomRows[0]?.categories) {
+      const cats = typeof roomRows[0].categories === "string"
+        ? JSON.parse(roomRows[0].categories)
+        : roomRows[0].categories;
+      memTemplateCache.set(orgId, cats);
+      return cats;
+    }
+  } catch (err) {
+    // Silencioso em caso de DB novo
+  }
+
+  return [
+    { name: "Emergência", priority: 3, tma: 3 },
+    { name: "Consulta", priority: 2, tma: 8 },
+    { name: "Informação", priority: 1, tma: 5 },
+  ];
+};
+
+const saveQueueTemplate = async (orgId, categories) => {
+  memTemplateCache.set(orgId, categories);
+
+  try {
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS org_queue_templates (
+         org_id UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+         categories JSONB NOT NULL,
+         updated_at TIMESTAMPTZ DEFAULT NOW()
+       )`
+    );
+
+    await pool.query(
+      `INSERT INTO org_queue_templates (org_id, categories, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (org_id) DO UPDATE
+       SET categories = EXCLUDED.categories, updated_at = NOW()`,
+      [orgId, JSON.stringify(categories)]
+    );
+  } catch (err) {
+    console.warn("[orgService] saveQueueTemplate DB save:", err.message);
+  }
+
+  return categories;
+};
+
 module.exports = {
   createOrg,
   listUserOrgs,
@@ -231,4 +305,6 @@ module.exports = {
   removeMember,
   inviteMember,
   acceptInvite,
+  getQueueTemplate,
+  saveQueueTemplate,
 };

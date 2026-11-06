@@ -63,6 +63,43 @@ router.get(
   }
 );
 
+// ── GET /api/orgs/:orgId/queue-template — Obter modelo persistente de fila (M2) ─
+router.get(
+  "/:orgId/queue-template",
+  requireAuth,
+  requireRole("operator"),
+  async (req, res) => {
+    try {
+      const categories = await orgService.getQueueTemplate(req.params.orgId);
+      res.json({ categories });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// ── PUT /api/orgs/:orgId/queue-template — Salvar modelo persistente de fila (M2) ─
+router.put(
+  "/:orgId/queue-template",
+  requireAuth,
+  requireRole("operator"),
+  [
+    body("categories").isArray({ min: 1, max: 20 }),
+    body("categories.*.name").trim().isLength({ min: 1, max: 50 }).escape(),
+    body("categories.*.priority").isInt({ min: 1, max: 3 }),
+    body("categories.*.tma").isInt({ min: 1, max: 120 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const categories = await orgService.saveQueueTemplate(req.params.orgId, req.body.categories);
+      res.json({ categories });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
 // ── PATCH /api/orgs/:orgId — Atualizar org ───────────────────────
 router.patch(
   "/:orgId",

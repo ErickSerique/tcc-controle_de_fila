@@ -1,9 +1,9 @@
-import { AlertTriangle, HelpCircle } from "lucide-react";
 import Modal from "./Modal";
+import { AlertTriangle, HelpCircle } from "lucide-react";
 
 /**
- * ConfirmModal — modal de confirmação genérico para ações destrutivas
- * (sair da fila, remover ticket, excluir organização, etc.).
+ * ConfirmModal — modal de confirmação para substituir window.confirm().
+ * Exibe título, mensagem e botões com visual refinado e ícones SVG.
  */
 const ConfirmModal = ({
   open,
@@ -19,34 +19,44 @@ const ConfirmModal = ({
     onClose?.();
   };
 
-  const Icon = danger ? AlertTriangle : HelpCircle;
-
   return (
-    <Modal open={open} onClose={onClose} maxWidth="380px">
-      <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: "10px", flexShrink: 0,
-          background: danger ? "var(--danger-glow)" : "var(--accent-light)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <Icon size={18} color={danger ? "var(--danger)" : "var(--accent)"} />
+    <Modal open={open} onClose={onClose} maxWidth="420px">
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: "8px",
+            background: danger ? "var(--danger-muted)" : "var(--primary-muted)",
+            border: `1px solid ${danger ? "var(--danger-border)" : "var(--primary-border)"}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: danger ? "var(--danger)" : "var(--primary)",
+            flexShrink: 0,
+          }}
+        >
+          {danger ? <AlertTriangle size={20} /> : <HelpCircle size={20} />}
         </div>
-        <h3 style={{ fontWeight: 700, fontSize: "17px", paddingTop: "6px" }}>{title}</h3>
+        <h3 style={{ fontWeight: 700, fontSize: "17px", margin: 0, color: "var(--text)" }}>
+          {title}
+        </h3>
       </div>
-      <p style={{ color: "var(--text-muted)", fontSize: "13px", lineHeight: 1.6, marginBottom: "22px" }}>
+      <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.6, marginBottom: "24px" }}>
         {message}
       </p>
-      <div style={{ display: "flex", gap: "10px" }}>
-        <button className="btn" onClick={onClose} style={{ flex: 1, padding: "12px" }}>
+      <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+        <button
+          onClick={onClose}
+          className="btn btn-secondary"
+          style={{ padding: "10px 18px", fontSize: "13px" }}
+        >
           Cancelar
         </button>
         <button
-          className={danger ? "btn" : "btn btn-primary"}
           onClick={handleConfirm}
-          style={{
-            flex: 1, padding: "12px", fontWeight: 700,
-            ...(danger && { background: "var(--danger-glow)", color: "var(--danger)", borderColor: "var(--danger-glow)" }),
-          }}
+          className={danger ? "btn btn-danger" : "btn btn-primary"}
+          style={{ padding: "10px 18px", fontSize: "13px" }}
         >
           {confirmText}
         </button>
