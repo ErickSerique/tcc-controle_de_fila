@@ -162,7 +162,13 @@ router.post(
   requireAuth,
   requireRole("admin"),
   [
-    body("email").isEmail().normalizeEmail(),
+    body("email")
+      .isEmail()
+      .normalizeEmail({
+        gmail_remove_dots: false,
+        gmail_remove_subaddress: false,
+        gmail_convert_googlemaildotcom: false,
+      }),
     body("role").isIn(["operator", "admin"]),
   ],
   validate,
@@ -180,6 +186,20 @@ router.post(
   }
 );
 
+// ── GET /api/orgs/invites/:token — Prévia pública do convite ─────
+router.get(
+  "/invites/:token",
+  [param("token").trim().isLength({ min: 10 })],
+  validate,
+  async (req, res) => {
+    try {
+      res.json(await orgService.getInviteInfo(req.params.token));
+    } catch (err) {
+      res.status(404).json({ error: err.message });
+    }
+  }
+);
+
 // ── POST /api/orgs/invites/accept — Aceitar convite ──────────────
 router.post(
   "/invites/accept",
@@ -188,7 +208,7 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const invite = await orgService.acceptInvite(req.body.token, req.user.id);
+      const invite = await orgService.acceptInvite(req.body.token, req.user.id, req.user.email);
       res.json({ invite });
     } catch (err) {
       res.status(400).json({ error: err.message });

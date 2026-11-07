@@ -10,13 +10,8 @@ import { supabase } from "./supabase";
 
 const BASE = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
 
-const LOCAL_SESSION_KEY = "fila_io_local_session";
+const LOCAL_SESSION_KEY = "kiwii_local_session";
 
-/**
- * Cache do access token — injetado pelo useAuth quando a sessão muda.
- * Isso evita chamar supabase.auth.getSession() em cada request,
- * que pode travar durante um TOKEN_REFRESH do Supabase.
- */
 let _cachedToken = null;
 
 export const setAuthToken = (token) => {
@@ -26,22 +21,25 @@ export const setAuthToken = (token) => {
 // ── Sessão local (offline) ───────────────────────────────────────
 
 export const saveLocalSession = (token) => {
-  try { localStorage.setItem(LOCAL_SESSION_KEY, token); } catch {}
+  try {
+    localStorage.setItem(LOCAL_SESSION_KEY, token);
+  } catch {}
 };
 
 export const clearLocalSession = () => {
-  try { localStorage.removeItem(LOCAL_SESSION_KEY); } catch {}
+  try {
+    localStorage.removeItem(LOCAL_SESSION_KEY);
+  } catch {}
 };
 
 export const getLocalSession = () => {
-  try { return localStorage.getItem(LOCAL_SESSION_KEY); } catch { return null; }
+  try {
+    return localStorage.getItem(LOCAL_SESSION_KEY);
+  } catch {
+    return null;
+  }
 };
 
-/**
- * Retorna o melhor token disponível:
- *   1. Token Supabase (cacheado) — se online
- *   2. JWT local — se offline
- */
 const getActiveToken = () => _cachedToken || getLocalSession();
 
 /**
@@ -55,8 +53,8 @@ export const apiFetch = async (path, { orgId, headers: extraHeaders, ...opts } =
 
   const headers = {
     "Content-Type": "application/json",
-    ...(token   ? { Authorization: `Bearer ${token}` } : {}),
-    ...(orgId   ? { "X-Org-Id": orgId }               : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(orgId ? { "X-Org-Id": orgId } : {}),
     ...extraHeaders,
   };
 
@@ -70,7 +68,7 @@ export const apiFetch = async (path, { orgId, headers: extraHeaders, ...opts } =
   return res.json();
 };
 
-// ── Auth ──────────────────────────────────────────────────────────
+// ── Auth & Convites ────────────────────────────────────────────────
 export const syncProfile = (name) =>
   apiFetch("/api/auth/profile", { method: "POST", body: JSON.stringify({ name }) });
 
@@ -79,6 +77,10 @@ export const fetchMe = () => apiFetch("/api/auth/me");
 export const acceptInvite = (token) =>
   apiFetch("/api/auth/accept-invite", { method: "POST", body: JSON.stringify({ token }) });
 
+export const fetchInviteInfo = (token) => apiFetch(`/api/orgs/invites/${token}`);
+
+export const fetchMyInvites = () => apiFetch("/api/auth/my-invites");
+
 // ── Organizations ─────────────────────────────────────────────────
 export const createOrg = (name) =>
   apiFetch("/api/orgs", { method: "POST", body: JSON.stringify({ name }) });
@@ -86,7 +88,7 @@ export const createOrg = (name) =>
 export const fetchOrgs = () => apiFetch("/api/orgs");
 
 export const fetchOrgMembers = (orgId) =>
-  apiFetch("/api/orgs/:id/members".replace(":id", orgId), { orgId });
+  apiFetch(`/api/orgs/${orgId}/members`, { orgId });
 
 export const inviteMember = (orgId, email, role) =>
   apiFetch(`/api/orgs/${orgId}/invites`, {
@@ -115,18 +117,23 @@ export const deleteOrg = (orgId) =>
 export const createRoom = (orgId, data) =>
   apiFetch("/api/rooms", { orgId, method: "POST", body: JSON.stringify(data) });
 
-export const fetchOrgRooms = (orgId) => apiFetch("/api/rooms/org", { orgId });
-
 export const fetchRoomPublic = (code) => apiFetch(`/api/rooms/${code}`);
 
-export const closeDay = (orgId, code) =>
-  apiFetch(`/api/rooms/${code}/close`, { orgId, method: "POST" });
+export const fetchActiveRooms = (orgId) => apiFetch("/api/rooms/org/active", { orgId });
 
-export const fetchHistory = (orgId) => apiFetch("/api/rooms/history", { orgId });
+export const closeDay = (code) => apiFetch(`/api/rooms/${code}/close`, { method: "POST" });
+
+export const toggleRoomLock = (code, locked) =>
+  apiFetch(`/api/rooms/${code}/lock`, { method: "PATCH", body: JSON.stringify({ locked }) });
+
+export const fetchHistory = (orgId) => apiFetch("/api/rooms/meta/history", { orgId });
+
+export const fetchHistorySession = (orgId, sessionId) =>
+  apiFetch(`/api/rooms/meta/history/${sessionId}`, { orgId });
 
 // ── Queue ─────────────────────────────────────────────────────────
-export const joinQueue = (roomCode, name, category) =>
+export const joinQueue = (roomCode, name, category, customData = {}) =>
   apiFetch("/api/queue/join", {
     method: "POST",
-    body: JSON.stringify({ roomCode, name, category }),
+    body: JSON.stringify({ roomCode, name, category, customData }),
   });

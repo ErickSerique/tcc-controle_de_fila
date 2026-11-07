@@ -7,6 +7,7 @@
  * as rotas REST apenas validam entrada e chamam este service.
  */
 const { pool, supabase } = require("../config/db");
+const config = require("../config");
 
 // ── Organizations ─────────────────────────────────────────────────
 
@@ -86,7 +87,6 @@ const updateOrg = async (orgId, { name, operationMode, localServerUrl }) => {
 };
 
 const deleteOrg = async (orgId) => {
-  // Assume que ON DELETE CASCADE está configurado no banco de dados para membros, salas, etc.
   const { rowCount } = await pool.query(
     `DELETE FROM organizations WHERE id = $1`,
     [orgId]
@@ -102,29 +102,43 @@ const listMembers = async (orgId) => {
      FROM org_members om
      JOIN user_profiles up ON up.id = om.user_id
      WHERE om.org_id = $1 AND om.accepted_at IS NOT NULL
-     ORDER BY om.role DESC, up.name ASC`,
+     ORDER BY om.role ASC, up.name ASC`,
     [orgId]
   );
   return rows;
 };
 
 const updateMemberRole = async (orgId, targetUserId, newRole, requestingRole) => {
-  // Apenas owner pode promover/rebaixar admins
+  const { rows: current } = await pool.query(
+    `SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2 AND accepted_at IS NOT NULL`,
+    [orgId, targetUserId]
+  );
+  if (current.length === 0) throw new Error("Membro não encontrado.");
+
+  // Hierarquia: só o Dono mexe no cargo de outro Dono ou transfere a propriedade.
+  if (current[0].role === "owner" && requestingRole !== "owner") {
+    throw new Error("Apenas o Dono pode alterar o cargo de outro Dono.");
+  }
   if (newRole === "owner" && requestingRole !== "owner") {
-    throw new Error("Apenas o owner pode transferir ownership.");
+    throw new Error("Apenas o Dono pode transferir a propriedade.");
   }
 
   const { rows } = await pool.query(
-    `UPDATE org_members SET role = $3
-     WHERE org_id = $1 AND user_id = $2
-     RETURNING *`,
+    `UPDATE org_members SET role = $3 WHERE org_id = $1 AND user_id = $2 RETURNING *`,
     [orgId, targetUserId, newRole]
   );
-  if (rows.length === 0) throw new Error("Membro não encontrado.");
   return rows[0];
 };
 
 const removeMember = async (orgId, targetUserId, requestingUserId, requestingRole) => {
+  const { rows: target } = await pool.query(
+    `SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2`,
+    [orgId, targetUserId]
+  );
+  if (target[0]?.role === "owner" && requestingRole !== "owner") {
+    throw new Error("Apenas o Dono pode remover outro Dono.");
+  }
+
   // Não pode se remover se for o único owner
   if (requestingUserId === targetUserId) {
     const { rows } = await pool.query(
@@ -152,7 +166,7 @@ const inviteMember = async (orgId, { email, role, invitedByUserId }) => {
      FROM org_members om
      JOIN auth.users au ON au.id = om.user_id
      WHERE om.org_id = $1
-       AND au.email = $2
+       AND LOWER(au.email) = LOWER($2)
        AND om.accepted_at IS NOT NULL`,
     [orgId, email]
   );
@@ -171,45 +185,81 @@ const inviteMember = async (orgId, { email, role, invitedByUserId }) => {
     [orgId, email, role, invitedByUserId]
   );
   const invite = rows[0];
+  const clientUrl = config.CLIENT_URL || "http://localhost:5173";
+  const link = `${clientUrl}/invite/${invite.token}`;
 
-  // Envia e-mail via Supabase (quando configurado)
+  // O e-mail do Supabase costuma falhar em contas gratuitas (cota baixa, Site URL não
+  // configurado, ou usuário que já tem conta). Nunca dependemos só dele: o link sempre
+  // funciona e devolvemos explicitamente se o e-mail foi enviado.
+  let emailSent = false;
+  let emailError = null;
   try {
-    await supabase.auth.admin.inviteUserByEmail(email, {
-      data: { org_invite_token: invite.token },
-    });
+    if (supabase?.auth?.admin?.inviteUserByEmail) {
+      const { error } = await supabase.auth.admin.inviteUserByEmail(email, {
+        data: { org_invite_token: invite.token },
+      });
+      if (error) throw error;
+      emailSent = true;
+    }
   } catch (err) {
+    emailError = err.message;
     console.warn("[orgService] Supabase invite email falhou:", err.message);
-    // Não lança — retorna o token para exibir no painel
   }
 
-  return invite;
+  return { ...invite, link, emailSent, emailError };
 };
 
-const acceptInvite = async (token, userId) => {
+/** Prévia pública de um convite (sem login). */
+const getInviteInfo = async (token) => {
   const { rows } = await pool.query(
-    `SELECT * FROM org_invites
-     WHERE token = $1 AND accepted_at IS NULL AND expires_at > NOW()`,
+    `SELECT oi.email, oi.role, oi.expires_at, oi.accepted_at, o.name AS org_name
+     FROM org_invites oi JOIN organizations o ON o.id = oi.org_id
+     WHERE oi.token = $1`,
+    [token]
+  );
+  if (rows.length === 0) throw new Error("Convite não encontrado.");
+  const row = rows[0];
+  if (row.accepted_at) throw new Error("Este convite já foi utilizado.");
+  if (new Date(row.expires_at) < new Date()) throw new Error("Este convite expirou.");
+  return { orgName: row.org_name, role: row.role, email: row.email };
+};
+
+const ROLE_RANK = { operator: 1, admin: 2, owner: 3 };
+
+/**
+ * Aceita um convite. Nominal: só o e-mail convidado pode aceitar. Se a pessoa já é
+ * membro com cargo igual ou maior, o cargo atual é mantido (convite nunca rebaixa).
+ */
+const acceptInvite = async (token, userId, userEmail) => {
+  const { rows } = await pool.query(
+    `SELECT * FROM org_invites WHERE token = $1 AND accepted_at IS NULL AND expires_at > NOW()`,
     [token]
   );
   if (rows.length === 0) throw new Error("Convite inválido ou expirado.");
 
   const invite = rows[0];
+  if (userEmail && invite.email.toLowerCase() !== userEmail.toLowerCase()) {
+    throw new Error(`Este convite foi enviado para outro e-mail (${invite.email}). Entre com essa conta para aceitá-lo.`);
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const { rows: existing } = await client.query(
+      `SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2`,
+      [invite.org_id, userId]
+    );
+    const keepRole = !!(existing[0] && ROLE_RANK[existing[0].role] >= ROLE_RANK[invite.role]);
 
     await client.query(
       `INSERT INTO org_members (org_id, user_id, role, invited_by, accepted_at)
        VALUES ($1, $2, $3, $4, NOW())
-       ON CONFLICT (org_id, user_id) DO UPDATE SET role = EXCLUDED.role, accepted_at = NOW()`,
-      [invite.org_id, userId, invite.role, invite.invited_by]
+       ON CONFLICT (org_id, user_id) DO UPDATE
+         SET role = CASE WHEN $5 THEN org_members.role ELSE EXCLUDED.role END,
+             accepted_at = COALESCE(org_members.accepted_at, NOW())`,
+      [invite.org_id, userId, invite.role, invite.invited_by, keepRole]
     );
-
-    await client.query(
-      `UPDATE org_invites SET accepted_at = NOW() WHERE id = $1`,
-      [invite.id]
-    );
-
+    await client.query(`UPDATE org_invites SET accepted_at = NOW() WHERE id = $1`, [invite.id]);
     await client.query("COMMIT");
     return invite;
   } catch (err) {
@@ -218,6 +268,19 @@ const acceptInvite = async (token, userId) => {
   } finally {
     client.release();
   }
+};
+
+/** Convites pendentes (não aceitos e não expirados) enviados para um e-mail. */
+const listPendingInvitesForEmail = async (email) => {
+  if (!email) return [];
+  const { rows } = await pool.query(
+    `SELECT oi.token, oi.role, oi.expires_at, o.name AS org_name
+     FROM org_invites oi JOIN organizations o ON o.id = oi.org_id
+     WHERE LOWER(oi.email) = LOWER($1) AND oi.accepted_at IS NULL AND oi.expires_at > NOW()
+     ORDER BY oi.created_at DESC`,
+    [email]
+  );
+  return rows;
 };
 
 module.exports = {
@@ -231,4 +294,6 @@ module.exports = {
   removeMember,
   inviteMember,
   acceptInvite,
+  getInviteInfo,
+  listPendingInvitesForEmail,
 };

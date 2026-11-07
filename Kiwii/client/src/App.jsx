@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState, useEffect } from "react";
 import LandingScreen from "./screens/LandingScreen";
 import HostSetupScreen from "./screens/HostSetupScreen";
 import ClientCheckinScreen from "./screens/ClientCheckinScreen";
@@ -8,31 +8,28 @@ import MonitorScreen from "./screens/MonitorScreen";
 import AuthScreen from "./screens/AuthScreen";
 import MembersScreen from "./screens/MembersScreen";
 import OrgSetupScreen from "./screens/OrgSetupScreen";
+import InviteScreen from "./screens/InviteScreen";
 import OfflineBanner from "./components/OfflineBanner";
+import { useAuth } from "./hooks/useAuth";
+import { acceptInvite } from "./lib/api";
 
-/**
- * App — controlador de navegação principal.
- *
- * Rotas normais (state machine interna persistida no sessionStorage):
- *   landing → host-setup → host-panel
- *   landing → client-checkin → live-ticket
- *   landing → auth
- *   landing → members
- *   landing → org-setup
- *
- * Deep link especial:
- *   /monitor/:roomCode → bypassa a state machine e renderiza direto
- *   o painel de TV externa (somente leitura, sem login).
- */
 const getMonitorRoomCode = () => {
   const match = window.location.pathname.match(/^\/monitor\/([A-Z0-9]{6})$/i);
   return match ? match[1].toUpperCase() : null;
 };
 
+const getInviteToken = () => {
+  const match = window.location.pathname.match(/^\/invite\/([a-zA-Z0-9]+)$/i);
+  return match ? match[1] : null;
+};
+
 export default function App() {
   const monitorRoomCode = getMonitorRoomCode();
+  const directInviteToken = getInviteToken();
+  const { user, refreshOrgs } = useAuth();
 
   const [screen, setScreen] = useState(() => {
+    if (directInviteToken) return "invite";
     try {
       return sessionStorage.getItem("kiwii_screen") || "landing";
     } catch {
@@ -41,6 +38,7 @@ export default function App() {
   });
 
   const [ctx, setCtx] = useState(() => {
+    if (directInviteToken) return { inviteToken: directInviteToken };
     try {
       const saved = sessionStorage.getItem("kiwii_ctx");
       return saved ? JSON.parse(saved) : {};
@@ -49,7 +47,21 @@ export default function App() {
     }
   });
 
-  // Painel de monitor (TV externa) — não passa pelo fluxo normal de navegação
+  // Se o usuário fez login e tinha um convite pendente guardado no sessionStorage, processa automaticamente
+  useEffect(() => {
+    const pendingToken = sessionStorage.getItem("pending_invite_token");
+    if (user && pendingToken) {
+      sessionStorage.removeItem("pending_invite_token");
+      acceptInvite(pendingToken)
+        .then(() => refreshOrgs())
+        .catch(() => {})
+        .finally(() => {
+          navigate("landing");
+        });
+    }
+  }, [user, refreshOrgs]);
+
+  // Painel de monitor (TV externa)
   if (monitorRoomCode) {
     return <MonitorScreen roomCode={monitorRoomCode} />;
   }
@@ -66,16 +78,33 @@ export default function App() {
   const renderScreen = () => {
     switch (screen) {
       case "landing":
-        return <LandingScreen onNavigate={(target) => navigate(target)} />;
+        return <LandingScreen onNavigate={(target, data) => navigate(target, data)} />;
 
       case "auth":
         return <AuthScreen onBack={() => navigate("landing")} />;
+
+      case "invite":
+        return (
+          <InviteScreen
+            token={ctx.inviteToken || directInviteToken}
+            onAccepted={() => {
+              window.history.replaceState({}, "", "/");
+              navigate("landing");
+            }}
+            onRequireLogin={() => navigate("auth")}
+          />
+        );
 
       case "members":
         return <MembersScreen onBack={() => navigate("landing")} />;
 
       case "org-setup":
-        return <OrgSetupScreen onReady={() => navigate("landing")} onBack={() => navigate("landing")} />;
+        return (
+          <OrgSetupScreen
+            onReady={() => navigate("landing")}
+            onBack={() => navigate("landing")}
+          />
+        );
 
       case "host-setup":
         return (
@@ -113,7 +142,7 @@ export default function App() {
         );
 
       default:
-        return <LandingScreen onNavigate={(target) => navigate(target)} />;
+        return <LandingScreen onNavigate={(target, data) => navigate(target, data)} />;
     }
   };
 

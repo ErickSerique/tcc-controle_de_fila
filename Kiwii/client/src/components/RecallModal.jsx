@@ -10,27 +10,36 @@ import Modal from "./Modal";
  *   - "counter"     → chama direto para um guichê (pula a fila)
  *   - "queue_front" → readmite no início da fila (respeitando prioridade)
  */
-const RecallModal = ({ open, onClose, ticket, counters, onRecall }) => {
+const RecallModal = ({ open, onClose, ticket, counters, onRecall, myCounterName }) => {
   const [mode, setMode] = useState("counter");
   const [counter, setCounter] = useState(counters?.[0]?.name || "");
 
   useEffect(() => {
     if (open) {
       setMode("counter");
-      setCounter(counters?.[0]?.name || "");
+      setCounter(myCounterName || counters?.[0]?.name || "");
     }
-  }, [open, counters]);
+  }, [open, counters, myCounterName]);
 
   if (!ticket) return null;
 
   const handleConfirm = () => {
-    onRecall(ticket.token, mode, mode === "counter" ? counter : undefined);
+    onRecall(ticket.token, mode, mode === "counter" ? (myCounterName || counter) : undefined);
     onClose();
   };
 
   return (
     <Modal open={open} onClose={onClose} maxWidth="420px">
-      <h3 style={{ fontWeight: 700, marginBottom: "6px", fontSize: "17px", display: "flex", alignItems: "center", gap: "8px" }}>
+      <h3
+        style={{
+          fontWeight: 700,
+          marginBottom: "6px",
+          fontSize: "17px",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+        }}
+      >
         <RotateCcw size={17} color="var(--accent)" /> Chamar de Volta
       </h3>
       <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "20px" }}>
@@ -42,14 +51,28 @@ const RecallModal = ({ open, onClose, ticket, counters, onRecall }) => {
           className="btn"
           onClick={() => setMode("counter")}
           style={{
-            padding: "14px", textAlign: "left", display: "flex", alignItems: "flex-start", gap: "10px",
+            padding: "14px",
+            textAlign: "left",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "10px",
             border: `1px solid ${mode === "counter" ? "var(--accent)" : "var(--border)"}`,
             background: mode === "counter" ? "var(--accent-light)" : "var(--surface)",
           }}
         >
-          <Volume2 size={16} color={mode === "counter" ? "var(--accent)" : "var(--text-muted)"} style={{ marginTop: "2px", flexShrink: 0 }} />
+          <Volume2
+            size={16}
+            color={mode === "counter" ? "var(--accent)" : "var(--text-muted)"}
+            style={{ marginTop: "2px", flexShrink: 0 }}
+          />
           <div>
-            <div style={{ fontWeight: 700, color: mode === "counter" ? "var(--accent)" : "var(--text)", fontSize: "14px" }}>
+            <div
+              style={{
+                fontWeight: 700,
+                color: mode === "counter" ? "var(--accent)" : "var(--text)",
+                fontSize: "14px",
+              }}
+            >
               Chamar direto para o guichê
             </div>
             <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
@@ -62,14 +85,28 @@ const RecallModal = ({ open, onClose, ticket, counters, onRecall }) => {
           className="btn"
           onClick={() => setMode("queue_front")}
           style={{
-            padding: "14px", textAlign: "left", display: "flex", alignItems: "flex-start", gap: "10px",
+            padding: "14px",
+            textAlign: "left",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "10px",
             border: `1px solid ${mode === "queue_front" ? "var(--accent)" : "var(--border)"}`,
             background: mode === "queue_front" ? "var(--accent-light)" : "var(--surface)",
           }}
         >
-          <CornerUpLeft size={16} color={mode === "queue_front" ? "var(--accent)" : "var(--text-muted)"} style={{ marginTop: "2px", flexShrink: 0 }} />
+          <CornerUpLeft
+            size={16}
+            color={mode === "queue_front" ? "var(--accent)" : "var(--text-muted)"}
+            style={{ marginTop: "2px", flexShrink: 0 }}
+          />
           <div>
-            <div style={{ fontWeight: 700, color: mode === "queue_front" ? "var(--accent)" : "var(--text)", fontSize: "14px" }}>
+            <div
+              style={{
+                fontWeight: 700,
+                color: mode === "queue_front" ? "var(--accent)" : "var(--text)",
+                fontSize: "14px",
+              }}
+            >
               Voltar para o início da fila
             </div>
             <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
@@ -79,13 +116,33 @@ const RecallModal = ({ open, onClose, ticket, counters, onRecall }) => {
         </button>
       </div>
 
-      {mode === "counter" && (
+      {mode === "counter" && myCounterName && (
+        <div style={{ marginBottom: "20px", fontSize: "13px", color: "var(--text-muted)" }}>
+          Será chamado no seu guichê:{" "}
+          <strong style={{ color: "var(--text)" }}>{myCounterName}</strong>
+        </div>
+      )}
+
+      {mode === "counter" && !myCounterName && (
         <div style={{ marginBottom: "20px" }}>
-          <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px", textTransform: "uppercase" }}>
+          <label
+            className="mono"
+            style={{
+              fontSize: "11px",
+              color: "var(--text-muted)",
+              display: "block",
+              marginBottom: "6px",
+              textTransform: "uppercase",
+            }}
+          >
             Guichê
           </label>
           <select className="input" value={counter} onChange={(e) => setCounter(e.target.value)}>
-            {counters.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            {counters.map((c) => (
+              <option key={c.id} value={c.name}>
+                {c.name}
+              </option>
+            ))}
           </select>
         </div>
       )}
@@ -94,7 +151,11 @@ const RecallModal = ({ open, onClose, ticket, counters, onRecall }) => {
         <button className="btn" onClick={onClose} style={{ flex: 1, padding: "12px" }}>
           Cancelar
         </button>
-        <button className="btn btn-primary" onClick={handleConfirm} style={{ flex: 2, padding: "12px", fontWeight: 700 }}>
+        <button
+          className="btn btn-primary"
+          onClick={handleConfirm}
+          style={{ flex: 2, padding: "12px", fontWeight: 700 }}
+        >
           Confirmar
         </button>
       </div>

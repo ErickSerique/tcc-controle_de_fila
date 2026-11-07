@@ -7,6 +7,7 @@
  * Estas rotas cuidam de:
  *   - Criar/sincronizar user_profiles no nosso banco após o primeiro login
  *   - Aceitar convites de organização
+ *   - Listar convites pendentes do usuário
  *   - Emitir e renovar JWT local para operação offline
  */
 const express = require("express");
@@ -106,12 +107,22 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const invite = await orgService.acceptInvite(req.body.token, req.user.id);
+      const invite = await orgService.acceptInvite(req.body.token, req.user.id, req.user.email);
       res.json({ invite, message: "Convite aceito com sucesso." });
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
   }
 );
+
+/** GET /api/auth/my-invites — convites pendentes para o e-mail do usuário logado. */
+router.get("/my-invites", requireAuth, async (req, res) => {
+  try {
+    const invites = await orgService.listPendingInvitesForEmail(req.user.email);
+    res.json({ invites });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;

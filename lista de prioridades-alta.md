@@ -1,0 +1,11 @@
+**Prioridade das Sugestões**
+
+**Prioridade Alta**
+- Regra de organização de fila de a cada X pessoas atendidas de prioridade mais alta, chamar X pessoas de prioridade média na hora de criar a sala para prioridades mais baixas serem atendidas (Quantidade customizável pelo dono da organização);
+- Botão de confirmação antes de finalizar o dia para não ter um miss click e não deixar o dia ser encerrado até a fila estar vazia (clientes atendidos ou removidos);
+- Emails não sendo enviados para convidar membros para organização (erro de rota no banco?);
+- Implementar níveis de acesso, como cargos (Dono, administrador, operador) com suas devidas funcionalidades e definição de cargos para cada instituição, sendo mostrado o cargo daquela instituição ao escolher no menu home e esse cargo sendo definido pelo Dono ou Administrador daquela instituição;
+- Implementar uma funcionalidade para cada funcionário adicionado a uma instituição, após seu cargo ser definido pelo dono ou administrador, conseguir ser designado como um guichê em uma sessão. Ou seja, ter mais de um funcionário vendo a mesma fila em tempo real e trabalhando como um dos guichês caso o estabelecimento tenha mais de um definido em sua criação;
+- Retirar o magic link (função de entrar sem senha, só pelo email);
+- Para evitar o funcionário ter que criar uma organização para conseguir entrar em uma outra organização que foi convidado, mudar o menu principal após ter feito o login perguntando se será criado uma instituição ou participar de alguma, caso seja uma conta nova (sem organizações) ou se for uma conta com organizações criadas, poder trocar as organizações (caso tenha mais de uma) ou criar uma sala na instituição definida. (Caso o usuário já tenha instituições criadas e seja convidado para uma nova, não precisa aparecer como botão no menu principal e sim no menu da sua conta);
+- Adicionar uma funcionalidade de "trancar" a fila, impedindo novos usuários de entrarem para que não deixe uma fila aberta infinitamente caso um usuário tente entrar continuamente (e o funcionário não conseguir encerrar o dia pois a fila precisa estar vazia).

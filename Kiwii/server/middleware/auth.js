@@ -24,6 +24,7 @@
 const jwt = require("jsonwebtoken");
 const { verifySupabaseToken, pool } = require("../config/db");
 const config = require("../config");
+const { ROLE_LEVEL, hasRole } = require("../utils/roleLevel");
 
 const LOCAL_SESSION_EXPIRY = "30d";
 const LOCAL_SESSION_TYPE = "local_session";
@@ -99,18 +100,46 @@ const requireAuth = async (req, res, next) => {
     req.profile = null;
   }
 
+<<<<<<< Updated upstream
   next();
+=======
+  return { user, profile, authMode };
 };
 
-// ── Role check ───────────────────────────────────────────────────
-
 /**
- * Verifica se o usuário pertence à organization informada no header
- * X-Org-Id e se possui o role mínimo exigido.
- *
- * Hierarquia: owner > admin > operator
+ * Middleware REST: exige um Bearer token válido no header Authorization.
  */
-const ROLE_LEVEL = { operator: 1, admin: 2, owner: 3 };
+const requireAuth = async (req, res, next) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Token de autenticação ausente." });
+  }
+
+  try {
+    const { user, profile, authMode } = await verifyToken(auth.split(" ")[1]);
+    req.user = user;
+    req.profile = profile;
+    req.authMode = authMode;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Token inválido ou expirado." });
+  }
+};
+
+/** Cargo REAL do usuário em uma organização (direto do banco). null se não for membro aceito. */
+const getMemberRole = async (orgId, userId) => {
+  const { rows } = await pool.query(
+    `SELECT role FROM org_members
+     WHERE org_id = $1 AND user_id = $2 AND accepted_at IS NOT NULL`,
+    [orgId, userId]
+  );
+  return rows[0]?.role ?? null;
+>>>>>>> Stashed changes
+};
+
+const getOrgRole = async (userId, orgId) => getMemberRole(orgId, userId);
+
+// ── Role check ───────────────────────────────────────────────────
 
 const requireRole = (minRole = "operator") => async (req, res, next) => {
   const orgId = req.headers["x-org-id"] || req.body?.orgId || req.params?.orgId;
@@ -121,11 +150,15 @@ const requireRole = (minRole = "operator") => async (req, res, next) => {
   req.orgId = orgId;
 
   try {
+<<<<<<< Updated upstream
     const { rows } = await pool.query(
       `SELECT role FROM org_members
        WHERE org_id = $1 AND user_id = $2 AND accepted_at IS NOT NULL`,
       [orgId, req.user.id]
     );
+=======
+    const userRole = await getMemberRole(orgId, req.user.id);
+>>>>>>> Stashed changes
 
     if (rows.length === 0) {
       return res.status(403).json({ error: "Acesso negado: você não é membro desta organização." });
@@ -134,7 +167,7 @@ const requireRole = (minRole = "operator") => async (req, res, next) => {
     const userRole = rows[0].role;
     req.orgRole = userRole;
 
-    if (ROLE_LEVEL[userRole] < ROLE_LEVEL[minRole]) {
+    if (!hasRole(userRole, minRole)) {
       return res.status(403).json({
         error: `Permissão insuficiente. Requer: ${minRole}. Seu role: ${userRole}.`,
       });
@@ -147,4 +180,18 @@ const requireRole = (minRole = "operator") => async (req, res, next) => {
   }
 };
 
+<<<<<<< Updated upstream
 module.exports = { requireAuth, requireRole, issueLocalSession, verifyLocalSession };
+=======
+module.exports = {
+  requireAuth,
+  requireRole,
+  verifyToken,
+  getMemberRole,
+  getOrgRole,
+  issueLocalSession,
+  verifyLocalSession,
+  ROLE_LEVEL,
+  hasRole,
+};
+>>>>>>> Stashed changes

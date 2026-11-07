@@ -1,4 +1,4 @@
-﻿const { v4: uuidv4 } = require("uuid");
+const { v4: uuidv4 } = require("uuid");
 const { rooms, recalcPositions } = require("./roomService");
 const { logAction } = require("./logService");
 
@@ -32,6 +32,8 @@ const pushTimeline = (ticket, status) => {
 const joinQueue = (roomCode, { name, category, manual = false, customData = {} }) => {
   const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room || !room.active) throw new Error("Sala inativa ou inexistente.");
+  // Fila trancada: bloqueia novas entradas (entradas manuais do host seguem permitidas)
+  if (room.locked && !manual) throw new Error("A fila está temporariamente trancada para novas entradas.");
 
   const catConfig = room.categories.find((c) => c.name === category);
   if (!catConfig) throw new Error(`Categoria "${category}" não existe nesta sala.`);
@@ -72,7 +74,7 @@ const joinQueue = (roomCode, { name, category, manual = false, customData = {} }
   };
 
   room.queue.push(ticket);
-  recalcPositions(room.queue);
+  recalcPositions(room.queue, room.priorityRule);
   return ticket;
 };
 
@@ -88,7 +90,7 @@ const callNext = (roomCode, { counter, actor } = {}) => {
   pushTimeline(next, "called");
   room.archive.unshift(next);
 
-  recalcPositions(room.queue);
+  recalcPositions(room.queue, room.priorityRule);
   logAction(room, actor, "ticket.called", {
     token: next.token,
     name: next.name,
@@ -112,7 +114,7 @@ const callSpecific = (roomCode, token, { counter, actor } = {}) => {
   pushTimeline(ticket, "called");
   room.archive.unshift(ticket);
 
-  recalcPositions(room.queue);
+  recalcPositions(room.queue, room.priorityRule);
   logAction(room, actor, "ticket.called_specific", {
     token,
     name: ticket.name,
@@ -150,7 +152,7 @@ const removeTicket = (roomCode, token, { actor } = {}) => {
   pushTimeline(ticket, "removed_by_host");
   room.archive.unshift(ticket);
 
-  recalcPositions(room.queue);
+  recalcPositions(room.queue, room.priorityRule);
   logAction(room, actor, "ticket.removed", { token, name: ticket.name });
   return room.queue;
 };
@@ -169,7 +171,7 @@ const leaveQueue = (roomCode, token) => {
   pushTimeline(ticket, "left_voluntarily");
   room.archive.unshift(ticket);
 
-  recalcPositions(room.queue);
+  recalcPositions(room.queue, room.priorityRule);
   // Ação do cliente, não do staff — registrado com role "client" para deixar claro nos logs
   logAction(room, { name: ticket.name, role: "client" }, "ticket.left_voluntarily", { token });
   return room.queue;
@@ -225,7 +227,7 @@ const recallTicket = (roomCode, token, { mode, counter, actor } = {}) => {
     pushTimeline(ticket, "readmitted_to_queue");
 
     room.queue.push(ticket);
-    recalcPositions(room.queue);
+    recalcPositions(room.queue, room.priorityRule);
     logAction(room, actor, "ticket.readmitted_queue", { token, name: ticket.name });
     return { mode, ticket };
   }
@@ -243,7 +245,7 @@ const changePriority = (roomCode, token, newPriority) => {
   if (!ticket) throw new Error("Ticket não encontrado na fila.");
 
   ticket.priority = newPriority;
-  recalcPositions(room.queue);
+  recalcPositions(room.queue, room.priorityRule);
   return room.queue;
 };
 
@@ -273,4 +275,3 @@ module.exports = {
   getQueue,
   getArchive,
 };
-
