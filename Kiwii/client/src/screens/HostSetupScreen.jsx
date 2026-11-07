@@ -1,10 +1,7 @@
 import { useState } from "react";
-<<<<<<< Updated upstream
-import { ArrowLeft, User, X, AlertTriangle, Loader2, Plus } from "lucide-react";
-=======
 import { ArrowLeft, User, X, AlertTriangle, Loader2, Plus, Shuffle } from "lucide-react";
->>>>>>> Stashed changes
 import { apiFetch } from "../lib/api";
+import { useAuth } from "../hooks/useAuth";
 
 const PRIORITY_OPTIONS = [
   { value: 3, label: "Alta", color: "var(--danger)" },
@@ -12,15 +9,7 @@ const PRIORITY_OPTIONS = [
   { value: 1, label: "Baixa", color: "var(--success)" },
 ];
 
-<<<<<<< Updated upstream
-const STAFF_ROLES = [
-  { value: "owner", label: "Owner (Dono)" },
-  { value: "admin", label: "Admin" },
-  { value: "operator", label: "Operador" },
-];
-=======
 const ROLE_LABELS = { owner: "Dono", admin: "Admin", operator: "Operador" };
->>>>>>> Stashed changes
 
 const FIELD_TYPES = [
   { value: "text", label: "Texto" },
@@ -46,13 +35,8 @@ const PriorityDot = ({ color }) => (
 );
 
 const HostSetupScreen = ({ onRoomCreated, onBack }) => {
-<<<<<<< Updated upstream
-  const [staffName, setStaffName] = useState("");
-  const [staffRole, setStaffRole] = useState("owner");
-=======
   const { user, activeOrg } = useAuth();
   const operatorName = user?.profile?.name ?? user?.email ?? "";
->>>>>>> Stashed changes
   const [roomName, setRoomName] = useState("");
   const [priorityBatchSize, setPriorityBatchSize] = useState(3);
 
@@ -115,12 +99,6 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
   const removeField = (id) => setCustomFields(customFields.filter((f) => f.id !== id));
 
   const createRoom = async () => {
-<<<<<<< Updated upstream
-    if (!staffName.trim()) { setError("Informe seu nome (operador responsável)."); return; }
-    if (!roomName.trim()) { setError("Nome da sala é obrigatório."); return; }
-    if (categories.length === 0) { setError("Adicione ao menos uma categoria."); return; }
-    if (counters.length === 0) { setError("Adicione ao menos um guichê."); return; }
-=======
     if (!activeOrg) {
       setError("Selecione uma organização antes de criar uma sala.");
       return;
@@ -137,20 +115,12 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
       setError("Adicione ao menos um guichê.");
       return;
     }
->>>>>>> Stashed changes
     setError("");
     setLoading(true);
 
     try {
       const data = await apiFetch("/api/rooms", {
         method: "POST",
-<<<<<<< Updated upstream
-        headers: {
-          "X-Actor-Name": staffName.trim(),
-          "X-Actor-Role": staffRole,
-        },
-        body: JSON.stringify({ name: roomName.trim(), categories, counters, customFields }),
-=======
         orgId: activeOrg.id,
         body: JSON.stringify({
           name: roomName.trim(),
@@ -159,10 +129,8 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
           customFields,
           priorityBatchSize: Math.max(0, parseInt(priorityBatchSize, 10) || 0),
         }),
->>>>>>> Stashed changes
       });
 
-      sessionStorage.setItem("staff_identity", JSON.stringify({ name: staffName.trim(), role: staffRole }));
       onRoomCreated(data.code, data.room);
     } catch (err) {
       setError(err.message);
@@ -207,34 +175,10 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
           </p>
         </div>
 
-<<<<<<< Updated upstream
-        {/* Identificação do operador */}
-=======
         {/* Quem está operando — vem da conta logada */}
->>>>>>> Stashed changes
         <div className="card" style={{ padding: "18px", marginBottom: "24px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
             <User size={15} color="var(--text-muted)" />
-<<<<<<< Updated upstream
-            <p className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Identificação do Operador
-            </p>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: "10px" }}>
-            <div>
-              <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Seu Nome</label>
-              <input className="input" placeholder="ex: Maria Silva" value={staffName} onChange={(e) => { setStaffName(e.target.value); setError(""); }} />
-            </div>
-            <div>
-              <label className="mono" style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Cargo</label>
-              <select className="input" value={staffRole} onChange={(e) => setStaffRole(e.target.value)}>
-                {STAFF_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </div>
-          </div>
-          <p style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "10px" }}>
-            Usado nos logs de auditoria — apenas Owner/Admin podem visualizá-los depois.
-=======
             <p
               className="mono"
               style={{
@@ -270,7 +214,6 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
           </div>
           <p style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "10px" }}>
             Suas ações ficam registradas nos logs de auditoria (visíveis apenas para Dono/Admin).
->>>>>>> Stashed changes
           </p>
         </div>
 

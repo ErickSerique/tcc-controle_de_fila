@@ -1,1 +1,26 @@
-analise_arquitetural_v2.md
+# Ignorar node_modules e dist
+node_modules/
+dist/
+
+# Pastas antigas / backups
+fila-io/
+Kiwii-estado-atual/
+
+# Arquivos de ambiente
+.env
+.env.*
+!Kiwii/.env.example
+!Kiwii/server/.env.example
+!Kiwii/client/.env.example
+
+# Logs e arquivos de cache
+*.log
+npm-debug.log*
+.vite/
+coverage/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

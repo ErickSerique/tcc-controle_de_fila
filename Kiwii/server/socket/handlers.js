@@ -1,9 +1,5 @@
 /**
  * socket/handlers.js — Kiwii
-<<<<<<< Updated upstream
- *
- * Registra todos os manipuladores de eventos em tempo real via Socket.io.
-=======
  * - io.use verifica o token Supabase/local (enviado por connectWithAuth) e popula socket.data.
  *   Sem token = anônimo (clientes da fila).
  * - host:join NÃO aceita actorName/actorRole do cliente: o cargo vem de org_members.
@@ -11,7 +7,6 @@
  *   usam o guichê reivindicado pelo próprio socket, nunca um valor do payload.
  * - host:toggle_lock: tranca/destranca novas entradas.
  * - Eventos de staff exigem um host:join bem-sucedido (socket.data.actor).
->>>>>>> Stashed changes
  */
 const {
   joinQueue,
@@ -25,25 +20,6 @@ const {
   getQueue,
   getArchive,
 } = require("../services/queueService");
-<<<<<<< Updated upstream
-const { roomExists } = require("../services/roomService");
-
-const registerSocketHandlers = (io) => {
-  io.on("connection", (socket) => {
-    console.log(`[ws] +connect  ${socket.id}`);
-
-    // ── HOST: entra no canal da sala, identificando-se ────────────
-    socket.on("host:join", ({ roomCode, actorName, actorRole }) => {
-      const code = roomCode?.toString().trim().toUpperCase();
-      if (!roomExists(code)) {
-        socket.emit("error", { message: "Sala não encontrada ou inativa." });
-        return;
-      }
-      socket.join(code);
-      socket.data.actor = { name: actorName || "Operador", role: actorRole || "operator" };
-      socket.data.roomCode = code;
-      console.log(`[ws] host ${socket.id} (${socket.data.actor.name}/${socket.data.actor.role}) → room ${code}`);
-=======
 const {
   roomExists,
   getRoom,
@@ -121,7 +97,6 @@ const registerSocketHandlers = (io) => {
           return socket.emit("error", {
             message: "Você não é membro da organização responsável por esta sala.",
           });
->>>>>>> Stashed changes
 
         socket.join(code);
         socket.data.roomCode = code;
@@ -194,15 +169,6 @@ const registerSocketHandlers = (io) => {
       socket.join(code);
       socket.data.token = token;
       socket.data.roomCode = code;
-<<<<<<< Updated upstream
-
-      // Procura primeiro na fila ativa (aguardando) e, se não achar, no
-      // arquivo do dia (chamado/atendido/removido/saiu). Sem isso, um
-      // cliente que reconecta (ex: F5) depois de já ter sido chamado
-      // nunca recebe seu status real, porque nesse ponto o ticket já
-      // saiu de `queue` e só existe em `archive`.
-=======
->>>>>>> Stashed changes
       const queue = getQueue(code);
       let myTicket = queue.find((t) => t.token === token);
       if (!myTicket) myTicket = getArchive(code).find((t) => t.token === token);
@@ -222,21 +188,6 @@ const registerSocketHandlers = (io) => {
       }
     });
 
-<<<<<<< Updated upstream
-    // ── HOST: chama o próximo ───────────────────────────────────────
-    socket.on("host:call_next", ({ roomCode, counter }) => {
-      const code = roomCode?.toString().trim().toUpperCase();
-      if (!roomExists(code)) {
-        socket.emit("error", { message: "Sala não encontrada ou inativa." });
-        return;
-      }
-      socket.join(code);
-      const called = callNext(code, { counter, actor: socket.data.actor });
-      if (!called) {
-        socket.emit("queue_empty", { roomCode: code });
-        return;
-      }
-=======
     socket.on("host:call_next", ({ roomCode }) => {
       if (!requireStaffJoined()) return;
       const code = activeRoomOrError(roomCode);
@@ -246,29 +197,17 @@ const registerSocketHandlers = (io) => {
         return socket.emit("error", { message: "Escolha um guichê antes de chamar o próximo." });
       const called = callNext(code, { counter, actor: socket.data.actor });
       if (!called) return socket.emit("queue_empty", { roomCode: code });
->>>>>>> Stashed changes
       io.to(code).emit("queue_update", { roomCode: code, queue: getQueue(code) });
       io.to(code).emit("archive_update", { roomCode: code, archive: getArchive(code) });
       io.to(code).emit("ticket_called", { roomCode: code, token: called.token, ticket: called });
     });
 
-<<<<<<< Updated upstream
-    // ── HOST: chama ticket específico (fora de ordem) ───────────────
-    socket.on("host:call_specific", ({ roomCode, token, counter }) => {
-      const code = roomCode?.toString().trim().toUpperCase();
-      if (!roomExists(code)) {
-        socket.emit("error", { message: "Sala não encontrada ou inativa." });
-        return;
-      }
-      socket.join(code);
-=======
     socket.on("host:call_specific", ({ roomCode, token }) => {
       if (!requireStaffJoined()) return;
       const code = activeRoomOrError(roomCode);
       if (!code) return;
       const counter = socket.data.claimedCounterName;
       if (!counter) return socket.emit("error", { message: "Escolha um guichê antes de chamar." });
->>>>>>> Stashed changes
       try {
         const called = callSpecific(code, token, { counter, actor: socket.data.actor });
         io.to(code).emit("queue_update", { roomCode: code, queue: getQueue(code) });
@@ -279,21 +218,10 @@ const registerSocketHandlers = (io) => {
       }
     });
 
-<<<<<<< Updated upstream
-    // ── HOST: confirma atendimento concluído no guichê ──────────────
-    socket.on("host:confirm_served", ({ roomCode, token }) => {
-      const code = roomCode?.toString().trim().toUpperCase();
-      if (!roomExists(code)) {
-        socket.emit("error", { message: "Sala não encontrada ou inativa." });
-        return;
-      }
-      socket.join(code);
-=======
     socket.on("host:confirm_served", ({ roomCode, token }) => {
       if (!requireStaffJoined()) return;
       const code = activeRoomOrError(roomCode);
       if (!code) return;
->>>>>>> Stashed changes
       try {
         confirmServed(code, token, { actor: socket.data.actor });
         io.to(code).emit("archive_update", { roomCode: code, archive: getArchive(code) });
@@ -302,21 +230,10 @@ const registerSocketHandlers = (io) => {
       }
     });
 
-<<<<<<< Updated upstream
-    // ── HOST: remove ticket da fila ──────────────────────────────────
-    socket.on("host:remove", ({ roomCode, token }) => {
-      const code = roomCode?.toString().trim().toUpperCase();
-      if (!roomExists(code)) {
-        socket.emit("error", { message: "Sala não encontrada ou inativa." });
-        return;
-      }
-      socket.join(code);
-=======
     socket.on("host:remove", ({ roomCode, token }) => {
       if (!requireStaffJoined()) return;
       const code = activeRoomOrError(roomCode);
       if (!code) return;
->>>>>>> Stashed changes
       try {
         const updated = removeTicket(code, token, { actor: socket.data.actor });
         io.to(code).emit("queue_update", { roomCode: code, queue: updated });
@@ -326,21 +243,10 @@ const registerSocketHandlers = (io) => {
       }
     });
 
-<<<<<<< Updated upstream
-    // ── HOST: altera prioridade de um ticket ─────────────────────────
-    socket.on("host:priority", ({ roomCode, token, priority }) => {
-      const code = roomCode?.toString().trim().toUpperCase();
-      if (!roomExists(code)) {
-        socket.emit("error", { message: "Sala não encontrada ou inativa." });
-        return;
-      }
-      socket.join(code);
-=======
     socket.on("host:priority", ({ roomCode, token, priority }) => {
       if (!requireStaffJoined()) return;
       const code = activeRoomOrError(roomCode);
       if (!code) return;
->>>>>>> Stashed changes
       try {
         io.to(code).emit("queue_update", {
           roomCode: code,
@@ -351,21 +257,6 @@ const registerSocketHandlers = (io) => {
       }
     });
 
-<<<<<<< Updated upstream
-    // ── HOST: adiciona cliente manualmente (walk-in sem smartphone) ──
-    socket.on("host:add_manual", ({ roomCode, name, category, customData }) => {
-      const code = roomCode?.toString().trim().toUpperCase();
-      if (!roomExists(code)) {
-        socket.emit("error", { message: "Sala não encontrada ou inativa." });
-        return;
-      }
-      socket.join(code);
-      try {
-        joinQueue(code, { name, category, manual: true, customData: customData || {} });
-        const currentQueue = getQueue(code);
-        io.to(code).emit("queue_update", { roomCode: code, queue: currentQueue });
-        socket.emit("queue_update", { roomCode: code, queue: currentQueue });
-=======
     socket.on("host:add_manual", ({ roomCode, name, category, customData }) => {
       if (!requireStaffJoined()) return;
       const code = activeRoomOrError(roomCode);
@@ -373,22 +264,11 @@ const registerSocketHandlers = (io) => {
       try {
         joinQueue(code, { name, category, manual: true, customData: customData || {} });
         io.to(code).emit("queue_update", { roomCode: code, queue: getQueue(code) });
->>>>>>> Stashed changes
       } catch (err) {
         socket.emit("error", { message: err.message });
       }
     });
 
-<<<<<<< Updated upstream
-    // ── HOST: recall unificado — chama de volta um ticket já arquivado ──
-    socket.on("host:recall", ({ roomCode, token, mode, counter }) => {
-      const code = roomCode?.toString().trim().toUpperCase();
-      if (!roomExists(code)) {
-        socket.emit("error", { message: "Sala não encontrada ou inativa." });
-        return;
-      }
-      socket.join(code);
-=======
     socket.on("host:recall", ({ roomCode, token, mode }) => {
       if (!requireStaffJoined()) return;
       const code = activeRoomOrError(roomCode);
@@ -396,7 +276,6 @@ const registerSocketHandlers = (io) => {
       const counter = socket.data.claimedCounterName;
       if (mode === "counter" && !counter)
         return socket.emit("error", { message: "Escolha um guichê antes de chamar." });
->>>>>>> Stashed changes
       try {
         recallTicket(code, token, { mode, counter, actor: socket.data.actor });
         io.to(code).emit("queue_update", { roomCode: code, queue: getQueue(code) });

@@ -1,6 +1,4 @@
 import { useState, useEffect } from "react";
-<<<<<<< Updated upstream
-=======
 import {
   ArrowLeft,
   Monitor,
@@ -21,9 +19,9 @@ import {
   Building,
   UserCheck,
 } from "lucide-react";
->>>>>>> Stashed changes
 import socket from "../lib/socket";
 import { apiFetch } from "../lib/api";
+import { useAuth } from "../hooks/useAuth";
 import QRDisplay from "../components/QRDisplay";
 import Modal from "../components/Modal";
 import RecallModal from "../components/RecallModal";
@@ -33,27 +31,10 @@ import CustomFieldInput, { validateCustomFields } from "../components/CustomFiel
 import { exportToCSV, exportToJSON } from "../lib/export";
 
 const PRIORITY_OPTIONS = [
-  { value: 3, label: "🔴 Alta", color: "#F87171" },
-  { value: 2, label: "🟡 Média", color: "#FCD34D" },
-  { value: 1, label: "🟢 Baixa", color: "#6EE7B7" },
+  { value: 3, label: "Alta", color: "var(--danger)" },
+  { value: 2, label: "Média", color: "var(--warn)" },
+  { value: 1, label: "Baixa", color: "var(--success)" },
 ];
-<<<<<<< Updated upstream
-const getPriorityColor = (p) => (p === 3 ? "#F87171" : p === 2 ? "#FCD34D" : "#6EE7B7");
-
-const STATUS_BADGE = {
-  served:           { label: "✅ Atendido", color: "var(--accent)", bg: "rgba(110,231,183,0.1)" },
-  removed_by_host:  { label: "❌ Removido", color: "var(--danger)", bg: "#7f1d1d33" },
-  left_voluntarily: { label: "🚪 Saiu",     color: "var(--warn)",   bg: "#78350f33" },
-};
-
-/** Lê a identidade do operador salva pelo HostSetupScreen. */
-const getStaffIdentity = () => {
-  try {
-    return JSON.parse(sessionStorage.getItem("staff_identity")) || { name: "Operador", role: "operator" };
-  } catch {
-    return { name: "Operador", role: "operator" };
-  }
-=======
 const getPriorityColor = (p) =>
   p === 3 ? "var(--danger)" : p === 2 ? "var(--warn)" : "var(--success)";
 
@@ -61,11 +42,14 @@ const STATUS_BADGE = {
   served: { label: "Atendido", Icon: Check, color: "var(--success)", bg: "var(--success-glow)" },
   removed_by_host: { label: "Removido", Icon: X, color: "var(--danger)", bg: "var(--danger-glow)" },
   left_voluntarily: { label: "Saiu", Icon: RotateCcw, color: "var(--warn)", bg: "var(--warn-glow)" },
->>>>>>> Stashed changes
 };
 
 const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
-  const staff = getStaffIdentity();
+  const { user, activeOrg } = useAuth();
+  const staff = {
+    name: user?.profile?.name ?? user?.email ?? "Operador",
+    role: activeOrg?.role ?? "operator",
+  };
   const canViewLogs = staff.role === "owner" || staff.role === "admin";
 
   const [queue, setQueue] = useState([]);
@@ -104,12 +88,11 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
   // ── Socket ──────────────────────────────────────────────────
   useEffect(() => {
     const joinRoom = () => {
-      socket.emit("host:join", { roomCode, actorName: staff.name, actorRole: staff.role });
+      if (!socket.auth?.token) return;
+      socket.emit("host:join", { roomCode });
     };
 
-    if (socket.connected) {
-      joinRoom();
-    }
+    if (socket.connected) joinRoom();
     socket.on("connect", joinRoom);
 
     const handleQueue = ({ roomCode: rc, queue: q }) => {
@@ -156,12 +139,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
       socket.off("counter_claimed", handleCounterClaimed);
       socket.off("error", handleSocketError);
     };
-<<<<<<< Updated upstream
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode]);
-=======
   }, [roomCode, user?.id]);
->>>>>>> Stashed changes
 
   // ── Ações de Fila e Guichê ──────────────────────────────────
   const claimCounterAction = (counterId) => {
@@ -232,15 +210,10 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   const fetchLogs = async () => {
     try {
-<<<<<<< Updated upstream
-      const data = await apiFetch(`/api/rooms/${roomCode}/logs`, { headers: { "X-Actor-Role": staff.role } });
-      setLogs(data.logs);
-=======
       const data = await apiFetch(`/api/rooms/${roomCode}/logs`, {
         orgId: room.orgId || activeOrg?.id,
       });
       setLogs(data.logs || []);
->>>>>>> Stashed changes
       setLogsModalOpen(true);
     } catch (err) {
       setError(err.message);
@@ -249,12 +222,8 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   const fetchHistory = async () => {
     try {
-<<<<<<< Updated upstream
-      const data = await apiFetch("/api/rooms/meta/history");
-=======
       const targetOrgId = room.orgId || activeOrg?.id;
       const data = await apiFetch("/api/rooms/meta/history", { orgId: targetOrgId });
->>>>>>> Stashed changes
       setHistoryData(data.history || []);
       setHistoryModalOpen(true);
     } catch (err) {
@@ -264,24 +233,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
   const openMonitor = () => window.open(`/monitor/${roomCode}`, "_blank");
 
-<<<<<<< Updated upstream
-  const handleCloseDay = async () => {
-    try {
-      const data = await apiFetch(`/api/rooms/${roomCode}/close`, {
-        method: "POST",
-        headers: { "X-Actor-Name": staff.name, "X-Actor-Role": staff.role },
-      });
-      setReport(data.report);
-      setCloseDayModal(true);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // ── Derivados ───────────────────────────────────────────────
-=======
   // ── Encerramento do Dia (Priority 2) ─────────────────────────
->>>>>>> Stashed changes
   const calledTickets = archive.filter((t) => t.status === "called");
   const registryTickets = archive.filter((t) =>
     ["served", "removed_by_host", "left_voluntarily"].includes(t.status)
@@ -330,13 +282,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
         }}
       >
         <div>
-<<<<<<< Updated upstream
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "18px", fontWeight: 800 }}>fila<span style={{ color: "var(--accent)" }}>.io</span></span>
-            <span className="tag" style={{ background: "var(--accent-glow)", color: "var(--accent)", border: "1px solid var(--accent-dim)" }}>HOST</span>
-            <span className="tag" style={{ background: "rgba(167,139,250,0.1)", color: "var(--purple)" }}>
-              {staff.name} · {staff.role === "owner" ? "Owner" : staff.role === "admin" ? "Admin" : "Operador"}
-=======
           <div
             style={{
               display: "flex",
@@ -348,7 +293,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
           >
             <span className="display" style={{ fontSize: "17px", fontWeight: 800 }}>
               Kiwi<span style={{ color: "var(--accent)" }}>i</span>
->>>>>>> Stashed changes
             </span>
             <span className="tag">HOST</span>
             <span
@@ -386,20 +330,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
         </div>
 
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-<<<<<<< Updated upstream
-          <button className="btn" onClick={onBack} style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)", padding: "7px 14px", borderRadius: "8px", fontSize: "13px" }}>
-            ← Voltar
-          </button>
-          <div className="card" style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", boxShadow: "0 0 8px var(--accent)" }} />
-            <span className="mono" style={{ fontSize: "14px", color: "var(--accent)", fontWeight: 600, letterSpacing: "0.15em" }}>{roomCode}</span>
-          </div>
-          <button className="btn" onClick={openMonitor} style={{ background: "rgba(96,165,250,0.08)", color: "var(--info)", border: "1px solid rgba(96,165,250,0.25)", padding: "7px 14px", borderRadius: "8px", fontSize: "13px" }}>
-            📺 Monitor
-          </button>
-          <button className="btn" onClick={fetchHistory} style={{ background: "rgba(167,139,250,0.08)", color: "var(--purple)", border: "1px solid rgba(167,139,250,0.25)", padding: "7px 14px", borderRadius: "8px", fontSize: "13px" }}>
-            📊 Histórico
-=======
           <button className="btn" onClick={onBack} style={{ padding: "7px 14px", fontSize: "13px" }}>
             <ArrowLeft size={14} /> Início
           </button>
@@ -427,17 +357,13 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
           <button className="btn" onClick={fetchHistory} style={{ padding: "7px 14px", fontSize: "13px" }}>
             <History size={14} /> Histórico
->>>>>>> Stashed changes
           </button>
 
           {canViewLogs && (
-            <button className="btn" onClick={fetchLogs} style={{ background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)", padding: "7px 14px", borderRadius: "8px", fontSize: "13px" }}>
-              📜 Logs
+            <button className="btn" onClick={fetchLogs} style={{ padding: "7px 14px", fontSize: "13px" }}>
+              <ScrollText size={14} /> Logs
             </button>
           )}
-<<<<<<< Updated upstream
-          <button className="btn" onClick={handleCloseDay} style={{ background: "#7f1d1d44", color: "var(--danger)", border: "1px solid rgba(248,113,113,0.3)", padding: "7px 14px", borderRadius: "8px", fontSize: "13px" }}>
-=======
 
           {/* Botão Trancar / Destrancar Fila (Priority 8) */}
           <button
@@ -476,7 +402,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
               background: "transparent",
             }}
           >
->>>>>>> Stashed changes
             Encerrar Dia
           </button>
         </div>
@@ -508,11 +433,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
       )}
 
       {error && (
-<<<<<<< Updated upstream
-        <div className="animate-fade" style={{ background: "#7f1d1d44", border: "1px solid rgba(248,113,113,0.3)", borderRadius: "8px", padding: "10px 16px", color: "var(--danger)", fontSize: "13px", marginBottom: "16px", display: "flex", justifyContent: "space-between" }}>
-          <span>⚠️ {error}</span>
-          <button onClick={() => setError("")} style={{ background: "transparent", border: "none", color: "var(--danger)", cursor: "pointer" }}>×</button>
-=======
         <div
           className="animate-fade"
           style={{
@@ -544,7 +464,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
           >
             <X size={16} />
           </button>
->>>>>>> Stashed changes
         </div>
       )}
 
@@ -561,15 +480,11 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
         {[
           { label: "Na Fila", value: queue.length, color: "var(--accent)" },
           { label: "Em Atendim.", value: calledTickets.length, color: "var(--info)" },
-<<<<<<< Updated upstream
-          { label: "Atendidos Hoje", value: registryTickets.filter((t) => t.status === "served").length, color: "var(--purple)" },
-=======
           {
             label: "Atendidos Hoje",
             value: registryTickets.filter((t) => t.status === "served").length,
             color: "var(--success)",
           },
->>>>>>> Stashed changes
           { label: "Espera Máx", value: formatWait(totalWait), color: "var(--warn)" },
         ].map((s) => (
           <div key={s.label} className="card" style={{ padding: "14px", textAlign: "center" }}>
@@ -621,22 +536,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
           </span>
         </div>
 
-<<<<<<< Updated upstream
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <select className="input" value={selectedCounter} onChange={(e) => setSelectedCounter(e.target.value)} style={{ maxWidth: "180px" }}>
-              {counters.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-            </select>
-            <button className="btn" onClick={callNext} disabled={queue.length === 0 || callLoading}
-              style={{ flex: 1, background: queue.length > 0 && !callLoading ? "linear-gradient(135deg, var(--accent), #34d399)" : "#1e293b", color: queue.length > 0 && !callLoading ? "#022c22" : "var(--text-dim)", borderRadius: "10px", fontSize: "14px", fontWeight: 800, minHeight: "48px" }}>
-              {callLoading ? "📡 Chamando..." : "📢 Chamar Próximo"}
-            </button>
-          </div>
-          <button className="btn" onClick={() => setManualModal(true)}
-            style={{ background: "rgba(96,165,250,0.08)", color: "var(--info)", border: "1px solid rgba(96,165,250,0.25)", borderRadius: "10px", fontSize: "13px", fontWeight: 600, minHeight: "44px" }}>
-            ➕ Adicionar Manualmente
-          </button>
-=======
         <div style={{ display: "flex", flexDirection: "column", gap: "10px", justifyContent: "center" }}>
           {/* Card do Guichê do Operador */}
           <div
@@ -695,17 +594,11 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
               <Plus size={15} /> Adicionar Manualmente
             </button>
           </div>
->>>>>>> Stashed changes
         </div>
       </div>
 
       {/* ── Fila Ativa ── */}
       <div className="card animate-fade" style={{ overflow: "hidden", marginBottom: "20px" }}>
-<<<<<<< Updated upstream
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h3 style={{ fontWeight: 700, fontSize: "15px" }}>Fila Ativa</h3>
-          <span className="tag" style={{ background: "var(--accent-glow)", color: "var(--accent)" }}>{queue.length} aguardando</span>
-=======
         <div
           style={{
             padding: "16px 20px",
@@ -717,13 +610,12 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
         >
           <h3 style={{ fontSize: "15px" }}>Fila Ativa</h3>
           <span className="tag">{queue.length} aguardando</span>
->>>>>>> Stashed changes
         </div>
 
         {queue.length === 0 ? (
           <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-            <div style={{ fontSize: "36px", marginBottom: "10px" }}>🎉</div>
-            <div style={{ fontWeight: 600 }}>Fila vazia!</div>
+            <Inbox size={32} style={{ marginBottom: "10px", opacity: 0.6 }} />
+            <div style={{ fontWeight: 600 }}>Fila vazia</div>
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -751,9 +643,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
               </thead>
               <tbody>
                 {queue.map((t, i) => (
-<<<<<<< Updated upstream
-                  <tr key={t.token} className="animate-slide" style={{ borderBottom: "1px solid var(--border)", animationDelay: `${i * 0.03}s`, background: i === 0 ? "rgba(110,231,183,0.04)" : "transparent" }}>
-=======
                   <tr
                     key={t.token}
                     className="animate-slide"
@@ -763,7 +652,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                       background: i === 0 ? "var(--accent-light)" : "transparent",
                     }}
                   >
->>>>>>> Stashed changes
                     <td style={{ padding: "12px 14px" }}>
                       <span
                         className="mono"
@@ -778,22 +666,13 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                     </td>
                     <td style={{ padding: "12px 14px" }}>
                       <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</span>
-<<<<<<< Updated upstream
-                      {t.manual && <span className="tag" style={{ marginLeft: "8px", background: "rgba(96,165,250,0.12)", color: "var(--info)", fontSize: "10px" }}>Manual</span>}
-=======
                       {t.manual && (
                         <span className="tag" style={{ marginLeft: "8px", fontSize: "10px" }}>
                           Manual
                         </span>
                       )}
->>>>>>> Stashed changes
                     </td>
                     <td style={{ padding: "12px 14px" }}>
-<<<<<<< Updated upstream
-                      <select className="mono" value={t.priority} onChange={(e) => changePriority(t.token, parseInt(e.target.value))}
-                        style={{ background: "var(--surface)", border: `1px solid ${getPriorityColor(t.priority)}44`, color: getPriorityColor(t.priority), borderRadius: "6px", padding: "4px 8px", fontSize: "12px", cursor: "pointer", outline: "none" }}>
-                        {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-=======
                       <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{t.category}</span>
                     </td>
                     <td style={{ padding: "12px 14px" }}>
@@ -817,7 +696,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                             {o.label}
                           </option>
                         ))}
->>>>>>> Stashed changes
                       </select>
                     </td>
                     <td style={{ padding: "12px 14px" }}>
@@ -827,10 +705,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                     </td>
                     <td style={{ padding: "12px 14px" }}>
                       <div style={{ display: "flex", gap: "6px" }}>
-<<<<<<< Updated upstream
-                        <button className="btn" onClick={() => callSpecificTicket(t.token)} style={{ background: "var(--accent-glow)", color: "var(--accent)", border: "1px solid var(--accent-dim)", padding: "6px 10px", borderRadius: "6px", fontSize: "12px" }}>Chamar</button>
-                        <button className="btn" onClick={() => removeTicket(t.token)} style={{ background: "#7f1d1d44", color: "var(--danger)", border: "1px solid rgba(248,113,113,0.2)", padding: "6px 10px", borderRadius: "6px", fontSize: "12px" }} aria-label="Remover">✕</button>
-=======
                         <button
                           className="btn"
                           onClick={() => callSpecificTicket(t.token)}
@@ -846,7 +720,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                         >
                           <X size={14} />
                         </button>
->>>>>>> Stashed changes
                       </div>
                     </td>
                   </tr>
@@ -860,24 +733,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
       {/* ── Em Atendimento ── */}
       {calledTickets.length > 0 && (
         <div className="card animate-fade" style={{ overflow: "hidden", marginBottom: "20px" }}>
-<<<<<<< Updated upstream
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <h3 style={{ fontWeight: 700, fontSize: "15px" }}>🔔 Em Atendimento</h3>
-            <span className="tag" style={{ background: "rgba(96,165,250,0.12)", color: "var(--info)" }}>{calledTickets.length}</span>
-          </div>
-          <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-            {calledTickets.map((t) => (
-              <div key={t.token} className="animate-slide" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderRadius: "10px", background: "rgba(96,165,250,0.06)", border: "1px solid rgba(96,165,250,0.15)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <span style={{ fontSize: "20px" }}>📢</span>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{t.category} · {t.counter}</div>
-                  </div>
-                </div>
-                <button className="btn" onClick={() => confirmServed(t.token)} style={{ background: "linear-gradient(135deg, #10b981, #34d399)", color: "#fff", borderRadius: "8px", padding: "8px 14px", fontSize: "12px", fontWeight: 700 }}>
-                  ✓ Confirmar Atendimento
-=======
           <div
             style={{
               padding: "16px 20px",
@@ -928,7 +783,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                   }}
                 >
                   <Check size={14} /> Confirmar Atendimento
->>>>>>> Stashed changes
                 </button>
               </div>
             ))}
@@ -939,11 +793,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
       {/* ── Registro do Dia ── */}
       {registryTickets.length > 0 && (
         <div className="card animate-fade" style={{ overflow: "hidden" }}>
-<<<<<<< Updated upstream
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <h3 style={{ fontWeight: 700, fontSize: "15px" }}>📋 Registro do Dia</h3>
-            <span className="tag" style={{ background: "rgba(167,139,250,0.12)", color: "var(--purple)" }}>{registryTickets.length}</span>
-=======
           <div
             style={{
               padding: "16px 20px",
@@ -957,7 +806,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
               <ClipboardList size={16} /> Registro do Dia
             </h3>
             <span className="tag">{registryTickets.length}</span>
->>>>>>> Stashed changes
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -983,16 +831,12 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
               </thead>
               <tbody>
                 {registryTickets.map((t, i) => {
-<<<<<<< Updated upstream
-                  const badge = STATUS_BADGE[t.status] || { label: t.status, color: "var(--text-muted)", bg: "transparent" };
-=======
                   const badge = STATUS_BADGE[t.status] || {
                     label: t.status,
                     Icon: Check,
                     color: "var(--text-muted)",
                     bg: "transparent",
                   };
->>>>>>> Stashed changes
                   const timeShown = t.servedAt || t.removedAt || t.leftAt || t.joinedAt;
                   return (
                     <tr
@@ -1004,9 +848,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                       }}
                     >
                       <td style={{ padding: "12px 14px" }}>
-<<<<<<< Updated upstream
-                        <span className="tag" style={{ background: badge.bg, color: badge.color, fontSize: "11px" }}>{badge.label}</span>
-=======
                         <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</span>
                       </td>
                       <td style={{ padding: "12px 14px" }}>
@@ -1024,7 +865,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                         >
                           <badge.Icon size={11} /> {badge.label}
                         </span>
->>>>>>> Stashed changes
                       </td>
                       <td style={{ padding: "12px 14px" }}>
                         <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>
@@ -1032,10 +872,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                         </span>
                       </td>
                       <td style={{ padding: "12px 14px" }}>
-<<<<<<< Updated upstream
-                        <button className="btn" onClick={() => setRecallTarget(t)} style={{ background: "rgba(167,139,250,0.1)", color: "var(--purple)", border: "1px solid rgba(167,139,250,0.25)", padding: "6px 12px", borderRadius: "6px", fontSize: "12px" }}>
-                          🔁 Chamar de Volta
-=======
                         <span className="mono" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
                           {new Date(timeShown).toLocaleTimeString("pt-BR")}
                         </span>
@@ -1047,7 +883,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
                           style={{ padding: "6px 12px", fontSize: "12px" }}
                         >
                           <RotateCcw size={13} /> Chamar de Volta
->>>>>>> Stashed changes
                         </button>
                       </td>
                     </tr>
@@ -1134,7 +969,7 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
 
       {/* ── Modal: Adicionar Manualmente ── */}
       <Modal open={manualModal} onClose={() => setManualModal(false)}>
-        <h3 style={{ fontWeight: 700, marginBottom: "18px", fontSize: "18px" }}>➕ Adicionar Manualmente</h3>
+        <h3 style={{ marginBottom: "18px" }}>Adicionar Manualmente</h3>
         <div style={{ marginBottom: "14px" }}>
           <label
             className="mono"
@@ -1196,10 +1031,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
         )}
 
         <div style={{ display: "flex", gap: "10px" }}>
-<<<<<<< Updated upstream
-          <button className="btn" onClick={() => setManualModal(false)} style={{ flex: 1, padding: "12px", background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>Cancelar</button>
-          <button className="btn" onClick={addManual} style={{ flex: 2, padding: "12px", background: "linear-gradient(135deg, var(--accent), #34d399)", color: "#022c22", fontWeight: 800 }}>Adicionar à Fila</button>
-=======
           <button
             className="btn"
             onClick={() => setManualModal(false)}
@@ -1214,7 +1045,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
           >
             Adicionar à Fila
           </button>
->>>>>>> Stashed changes
         </div>
       </Modal>
 
@@ -1319,11 +1149,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
         {report && (
           <>
             <div style={{ textAlign: "center", marginBottom: "24px" }}>
-<<<<<<< Updated upstream
-              <div style={{ fontSize: "48px", marginBottom: "10px" }}>📊</div>
-              <h2 style={{ fontSize: "22px", fontWeight: 800 }}>Relatório da Sessão</h2>
-              <p className="mono" style={{ color: "var(--text-muted)", fontSize: "12px" }}>{report.roomName} · {new Date(report.date).toLocaleDateString("pt-BR")}</p>
-=======
               <div
                 style={{
                   width: 56,
@@ -1342,7 +1167,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
               <p className="mono" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
                 {report.roomName} · {new Date(report.date).toLocaleDateString("pt-BR")}
               </p>
->>>>>>> Stashed changes
             </div>
             <div
               style={{
@@ -1353,10 +1177,10 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
               }}
             >
               {[
-                { label: "Atendidos", value: report.totalServed, color: "var(--accent)" },
+                { label: "Atendidos", value: report.totalServed, color: "var(--success)" },
                 { label: "Removidos", value: report.totalRemovedByHost, color: "var(--danger)" },
                 { label: "Saíram", value: report.totalLeftVoluntarily, color: "var(--warn)" },
-                { label: "Espera Média", value: `${report.avgWaitMinutes}min`, color: "var(--purple)" },
+                { label: "Espera Média", value: `${report.avgWaitMinutes}min`, color: "var(--info)" },
               ].map((s) => (
                 <div
                   key={s.label}
@@ -1380,13 +1204,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
               ))}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
-<<<<<<< Updated upstream
-              <button className="btn" onClick={() => exportToCSV(report)} style={{ padding: "14px", background: "var(--accent-glow)", color: "var(--accent)", border: "1px solid var(--accent-dim)", fontWeight: 700 }}>📥 Baixar como .CSV</button>
-              <button className="btn" onClick={() => exportToJSON(report)} style={{ padding: "14px", background: "rgba(167,139,250,0.08)", color: "var(--purple)", border: "1px solid rgba(167,139,250,0.25)", fontWeight: 700 }}>📥 Baixar como .JSON</button>
-            </div>
-            <button className="btn" onClick={() => { setCloseDayModal(false); onCloseDay(); }} style={{ width: "100%", padding: "12px", background: "#7f1d1d44", color: "var(--danger)", border: "1px solid rgba(248,113,113,0.25)" }}>
-              Encerrar e Voltar ao Início
-=======
               <button
                 className="btn"
                 onClick={() => exportToCSV(report)}
@@ -1411,7 +1228,6 @@ const QueueManagementScreen = ({ roomCode, room, onCloseDay, onBack }) => {
               style={{ width: "100%", padding: "12px" }}
             >
               Concluir e Voltar ao Início
->>>>>>> Stashed changes
             </button>
           </>
         )}

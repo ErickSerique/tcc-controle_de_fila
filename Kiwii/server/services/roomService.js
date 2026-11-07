@@ -62,11 +62,6 @@ const recalcPositions = (queue, priorityRule) => {
   return queue;
 };
 
-<<<<<<< Updated upstream
-// ── Service API ────────────────────────────────────────────────
-
-const createRoom = ({ name, hostId, categories, counters, customFields, actor }) => {
-=======
 const createRoom = ({
   name,
   orgId,
@@ -78,7 +73,6 @@ const createRoom = ({
   actor,
 }) => {
   if (!orgId) throw new Error("Toda sala precisa pertencer a uma organização.");
->>>>>>> Stashed changes
   const code = generateCode();
   const room = {
     code,
@@ -161,6 +155,7 @@ const closeDay = (code, actor) => {
 
   const report = {
     id: uuidv4(),
+    orgId: room.orgId,
     roomCode: room.code,
     roomName: room.name,
     date: new Date().toISOString(),
@@ -182,15 +177,10 @@ const closeDay = (code, actor) => {
   return report;
 };
 
-<<<<<<< Updated upstream
-const getHistory = () =>
-  [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
-=======
 const getHistory = (orgId) =>
   history
     .filter((h) => !orgId || h.orgId === orgId)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
->>>>>>> Stashed changes
 
 const getHistorySession = (sessionId) => history.find((h) => h.id === sessionId) ?? null;
 
@@ -231,10 +221,7 @@ module.exports = {
   getHistory,
   getHistorySession,
   DEFAULT_COUNTERS,
-<<<<<<< Updated upstream
-=======
   DEFAULT_PRIORITY_BATCH_SIZE,
   claimCounter,
   releaseCounterBySocket,
->>>>>>> Stashed changes
 };
