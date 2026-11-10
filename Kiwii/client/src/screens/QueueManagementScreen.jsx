@@ -1,264 +1,314 @@
 /**
  * screens/QueueManagementScreen.jsx
  *
- * Painel do host — Design System v3.0
- * Gerencia a fila em tempo real via Socket.io com ícones Lucide e zero emojis.
+ * Kiwii Design System v3.0 — Painel do Host / Atendente
+ * Unifica:
+ * - Alta 2: Fechamento de dia protegido com validação de fila vazia e relatório pós-encerramento
+ * - Alta 5: Multi-guichê com seleção e reivindicação de guichê individual por operador
+ * - Alta 8: Trancamento/destrancamento de fila em tempo real com banner visual
+ * - Média 1: Rechamada com RecallModal integrado ao guichê
+ * - Média 4/6: Auditoria de logs e histórico de sessões
+ * - Média 5: Adição manual com campos customizados
  */
-import { useState, useEffect, useCallback } from "react";
-import { useAuth } from "../hooks/useAuth";
-import socket from "../lib/socket";
-import { closeDay as closeDayApi, fetchRoomPublic } from "../lib/api";
-import QRDisplay from "../components/QRDisplay";
-import Modal from "../components/Modal";
-import { exportToCSV, exportToJSON } from "../lib/export";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft,
-  Megaphone,
-  UserPlus,
-  Bell,
-  Check,
-  CheckCircle2,
-  RotateCcw,
-  BellRing,
-  Trash2,
-  ChevronDown,
-  BarChart3,
-  Download,
+  Monitor,
+  History,
+  ScrollText,
+  AlertTriangle,
   X,
-  Clock,
-  Users,
-  Radio,
-  LogOut,
+  Inbox,
+  Volume2,
+  Check,
+  ClipboardList,
+  RotateCcw,
+  Plus,
+  Download,
+  Loader2,
+  Lock,
+  Unlock,
+  Building,
+  UserCheck,
 } from "lucide-react";
+import socket from "../lib/socket";
+import { apiFetch } from "../lib/api";
+import { useAuth } from "../hooks/useAuth";
+import QRDisplay from "../components/QRDisplay";
+import Modal from "../components/Modal";
+import RecallModal from "../components/RecallModal";
+import LogsModal from "../components/LogsModal";
+import HistoryModal from "../components/HistoryModal";
+import CustomFieldInput, { validateCustomFields } from "../components/CustomFieldInput";
+import { exportToCSV, exportToJSON } from "../lib/export";
 
 const PRIORITY_OPTIONS = [
-  { value: 3, label: "Alta", color: "var(--priority-high)", bg: "var(--priority-high-bg)", border: "rgba(248,113,113,0.3)" },
-  { value: 2, label: "Média", color: "var(--priority-med)", bg: "var(--priority-med-bg)", border: "rgba(251,191,36,0.3)" },
-  { value: 1, label: "Baixa", color: "var(--priority-low)", bg: "var(--priority-low-bg)", border: "rgba(52,211,153,0.3)" },
+  { value: 3, label: "Alta", color: "var(--danger)" },
+  { value: 2, label: "Média", color: "var(--warn)" },
+  { value: 1, label: "Baixa", color: "var(--success)" },
 ];
-
 const getPriorityColor = (p) =>
-  p === 3 ? "var(--priority-high)" : p === 2 ? "var(--priority-med)" : "var(--priority-low)";
+  p === 3 ? "var(--danger)" : p === 2 ? "var(--warn)" : "var(--success)";
+
+const STATUS_BADGE = {
+  served: { label: "Atendido", Icon: Check, color: "var(--success)", bg: "var(--success-glow)" },
+  removed_by_host: { label: "Removido", Icon: X, color: "var(--danger)", bg: "var(--danger-glow)" },
+  left_voluntarily: { label: "Saiu", Icon: RotateCcw, color: "var(--warn)", bg: "var(--warn-glow)" },
+};
 
 const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack }) => {
-  const { activeOrg } = useAuth();
+  const { user, activeOrg } = useAuth();
+  const staff = {
+    name: user?.profile?.name ?? user?.email ?? "Operador",
+    role: activeOrg?.role ?? "operator",
+  };
+  const canViewLogs = staff.role === "owner" || staff.role === "admin";
 
-  const [room, setRoom] = useState(roomProp || null);
-  const [roomLoading, setRoomLoading] = useState(!roomProp && !!roomCode);
-
+  const [currentRoom, setCurrentRoom] = useState(roomProp || null);
   const [queue, setQueue] = useState([]);
-  const [calledTickets, setCalledTickets] = useState([]);
-  const [servedTickets, setServedTickets] = useState([]);
-  const [servedCount, setServedCount] = useState(0);
+  const [archive, setArchive] = useState([]);
+  const [counters, setCounters] = useState(
+    roomProp?.counters?.length ? roomProp.counters : [{ id: "default", name: "Guichê Único" }]
+  );
+  const [counterClaims, setCounterClaims] = useState({});
+  const [myCounter, setMyCounter] = useState(null); // { id, name }
+  const [counterModalOpen, setCounterModalOpen] = useState(false);
+
+  const [locked, setLocked] = useState(!!roomProp?.locked);
+
   const [manualModal, setManualModal] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    name: "",
+    category: roomProp?.categories?.[0]?.name || "",
+  });
+  const [manualCustom, setManualCustom] = useState({});
+
+  // Modais de encerramento seguro (Alta 2)
+  const [confirmCloseModalOpen, setConfirmCloseModalOpen] = useState(false);
   const [closeDayModal, setCloseDayModal] = useState(false);
+  const [closingDay, setClosingDay] = useState(false);
   const [report, setReport] = useState(null);
-  const [manualForm, setManualForm] = useState({ name: "", category: "" });
+
+  const [recallTarget, setRecallTarget] = useState(null);
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyData, setHistoryData] = useState([]);
+
   const [callLoading, setCallLoading] = useState(false);
-  const [selectedServed, setSelectedServed] = useState(null);
+  const [error, setError] = useState("");
 
-  // Busca dados da sala se não vieram via prop
+  // Carrega informações da sala caso não tenham sido passadas diretamente por props
   useEffect(() => {
-    if (roomProp) {
-      setRoom(roomProp);
-      setManualForm((f) => ({ ...f, category: roomProp.categories?.[0]?.name || f.category }));
-      return;
+    if (!currentRoom && roomCode) {
+      apiFetch(`/api/rooms/${roomCode}`)
+        .then((data) => {
+          setCurrentRoom(data);
+          if (data.counters?.length) setCounters(data.counters);
+          setLocked(!!data.locked);
+          setManualForm((f) => ({ ...f, category: data.categories?.[0]?.name || "" }));
+        })
+        .catch((err) => setError(err.message));
     }
-    if (!roomCode) return;
+  }, [currentRoom, roomCode]);
 
-    setRoomLoading(true);
-    fetchRoomPublic(roomCode)
-      .then((data) => {
-        setRoom(data);
-        setManualForm((f) => ({ ...f, category: data.categories?.[0]?.name || f.category }));
-      })
-      .catch((err) => console.error("[host] Falha ao carregar sala:", err.message))
-      .finally(() => setRoomLoading(false));
-  }, [roomCode, roomProp]);
-
-  // ── Socket ────────────────────────────────────────────────────
-  const joinRoom = useCallback(() => {
-    if (roomCode) {
+  // ── Socket Events ───────────────────────────────────────────
+  useEffect(() => {
+    const joinRoom = () => {
+      if (!socket.auth?.token) return;
       socket.emit("host:join", { roomCode });
-    }
-  }, [roomCode]);
+    };
 
-  useEffect(() => {
-    if (!roomCode) return;
-
-    joinRoom();
+    if (socket.connected) joinRoom();
     socket.on("connect", joinRoom);
 
-    const handleUpdate = ({ roomCode: rc, queue: q }) => {
-      if (rc !== roomCode) return;
-      setQueue([...q]);
+    const handleQueue = ({ roomCode: rc, queue: q }) => {
+      if (rc?.toUpperCase() === roomCode?.toUpperCase()) setQueue([...q]);
     };
-
-    const handleTicketCalled = ({ roomCode: rc, ticket }) => {
-      if (rc !== roomCode || !ticket) return;
-      setCalledTickets((prev) => {
-        if (prev.some((t) => t.token === ticket.token)) return prev;
-        return [...prev, { ...ticket, calledAt: Date.now() }];
-      });
+    const handleArchive = ({ roomCode: rc, archive: a }) => {
+      if (rc?.toUpperCase() === roomCode?.toUpperCase()) setArchive([...a]);
     };
-
-    const handleTicketServed = ({ roomCode: rc, token, ticket }) => {
-      if (rc !== roomCode) return;
-      setCalledTickets((prev) => prev.filter((t) => t.token !== token));
-      setServedCount((c) => c + 1);
-      if (ticket) {
-        setServedTickets((prev) => [{ ...ticket, servedAt: Date.now() }, ...prev]);
-      } else {
-        setServedTickets((prev) => [{ token, servedAt: Date.now() }, ...prev]);
+    const handleCounters = ({ roomCode: rc, counterClaims: claims }) => {
+      if (rc?.toUpperCase() === roomCode?.toUpperCase()) setCounterClaims(claims || {});
+    };
+    const handleRoomStatus = ({ roomCode: rc, locked: isLocked }) => {
+      if (rc?.toUpperCase() === roomCode?.toUpperCase()) setLocked(!!isLocked);
+    };
+    const handleYouAre = ({ counters: roomCounters, claimedCounterId, claimedCounterName }) => {
+      if (roomCounters?.length) setCounters(roomCounters);
+      if (claimedCounterId) {
+        setMyCounter({ id: claimedCounterId, name: claimedCounterName });
+      } else if (roomCounters?.length > 1) {
+        setCounterModalOpen(true);
       }
     };
-
-    const handleTicketRecalled = ({ roomCode: rc, token, ticket }) => {
-      if (rc !== roomCode) return;
-      setServedTickets((prev) => prev.filter((t) => t.token !== token));
-      setServedCount((c) => Math.max(0, c - 1));
-      if (ticket) {
-        setCalledTickets((prev) => [
-          ...prev,
-          { ...ticket, name: ticket.name, calledAt: Date.now() },
-        ]);
-      }
+    const handleCounterClaimed = ({ counterId, counterName }) => {
+      setMyCounter({ id: counterId, name: counterName });
+      setCounterModalOpen(false);
     };
+    const handleSocketError = ({ message }) => setError(message);
 
-    socket.on("queue_update", handleUpdate);
-    socket.on("ticket_called", handleTicketCalled);
-    socket.on("ticket_served", handleTicketServed);
-    socket.on("ticket_recalled", handleTicketRecalled);
+    socket.on("queue_update", handleQueue);
+    socket.on("archive_update", handleArchive);
+    socket.on("counters_update", handleCounters);
+    socket.on("room_status", handleRoomStatus);
+    socket.on("you_are", handleYouAre);
+    socket.on("counter_claimed", handleCounterClaimed);
+    socket.on("error", handleSocketError);
 
     return () => {
       socket.off("connect", joinRoom);
-      socket.off("queue_update", handleUpdate);
-      socket.off("ticket_called", handleTicketCalled);
-      socket.off("ticket_served", handleTicketServed);
-      socket.off("ticket_recalled", handleTicketRecalled);
+      socket.off("queue_update", handleQueue);
+      socket.off("archive_update", handleArchive);
+      socket.off("counters_update", handleCounters);
+      socket.off("room_status", handleRoomStatus);
+      socket.off("you_are", handleYouAre);
+      socket.off("counter_claimed", handleCounterClaimed);
+      socket.off("error", handleSocketError);
     };
-  }, [roomCode, joinRoom]);
+  }, [roomCode, user?.id]);
 
-  // ── Ações ─────────────────────────────────────────────────────
-  const callNext = () => {
-    if (queue.length === 0 || callLoading) return;
-    setCallLoading(true);
-    socket.emit("host:call_next", { roomCode });
-    setTimeout(() => setCallLoading(false), 800);
+  // ── Ações de Fila e Guichê ──────────────────────────────────
+  const claimCounterAction = (counterId) => {
+    socket.emit("host:claim_counter", { roomCode, counterId });
   };
 
-  const handleConfirmServed = (token) => {
-    socket.emit("host:confirm_served", { roomCode, token });
+  const toggleLock = () => {
+    socket.emit("host:toggle_lock", { roomCode, locked: !locked });
+  };
+
+  const callNext = () => {
+    if (queue.length === 0 || callLoading) return;
+    if (counters.length > 1 && !myCounter) {
+      setCounterModalOpen(true);
+      setError("Escolha um guichê antes de chamar.");
+      return;
+    }
+    setCallLoading(true);
+    socket.emit("host:call_next", { roomCode });
+    setTimeout(() => setCallLoading(false), 600);
   };
 
   const callSpecificTicket = (token) => {
+    if (counters.length > 1 && !myCounter) {
+      setCounterModalOpen(true);
+      setError("Escolha um guichê antes de chamar.");
+      return;
+    }
     socket.emit("host:call_specific", { roomCode, token });
   };
 
+  const confirmServed = (token) => socket.emit("host:confirm_served", { roomCode, token });
   const removeTicket = (token) => socket.emit("host:remove", { roomCode, token });
-
   const changePriority = (token, priority) =>
     socket.emit("host:priority", { roomCode, token, priority });
 
-  const handleReadmit = (served) => {
-    socket.emit("host:readmit", {
-      roomCode,
-      token: served.token,
-      name: served.name,
-      category: served.category,
-      priority: served.priority ?? 1,
-    });
-    setServedTickets((prev) => prev.filter((t) => t.token !== served.token));
-    setServedCount((c) => Math.max(0, c - 1));
-    setSelectedServed(null);
-  };
-
-  const handleRecallServed = (served) => {
-    socket.emit("host:recall_served", { roomCode, token: served.token });
-    setSelectedServed(null);
-  };
-
   const addManual = () => {
-    if (!manualForm.name.trim()) return;
+    if (!manualForm.name.trim()) {
+      setError("Informe o nome do cliente.");
+      return;
+    }
+    if (currentRoom?.customFields?.length > 0) {
+      const err = validateCustomFields(currentRoom.customFields, manualCustom);
+      if (err) {
+        setError(err);
+        return;
+      }
+    }
+
     socket.emit("host:add_manual", {
       roomCode,
       name: manualForm.name.trim(),
       category: manualForm.category,
+      customData: manualCustom,
     });
-    setManualForm({ name: "", category: room.categories?.[0]?.name || "" });
+    setManualForm({ name: "", category: currentRoom?.categories?.[0]?.name || "" });
+    setManualCustom({});
     setManualModal(false);
+    setError("");
   };
 
-  const handleCloseDay = async () => {
+  const handleRecall = (token, mode) => {
+    if (mode === "counter" && counters.length > 1 && !myCounter) {
+      setCounterModalOpen(true);
+      setError("Escolha um guichê antes de chamar.");
+      return;
+    }
+    socket.emit("host:recall", { roomCode, token, mode });
+  };
+
+  const fetchLogs = async () => {
     try {
-      const data = await closeDayApi(activeOrg.id, roomCode);
-      setReport(data.report);
-      setCloseDayModal(true);
+      const targetOrgId = currentRoom?.orgId || activeOrg?.id;
+      const data = await apiFetch(`/api/rooms/${roomCode}/logs`, {
+        orgId: targetOrgId,
+      });
+      setLogs(data.logs || []);
+      setLogsModalOpen(true);
     } catch (err) {
-      alert(err.message);
+      setError(err.message);
     }
   };
 
-  const totalWait = queue.reduce((s, t) => s + (t.tma || 0), 0);
-  const formatWait = (mins) => (mins === 0 ? "Imediato" : `~${mins} min`);
+  const fetchHistory = async () => {
+    try {
+      const targetOrgId = currentRoom?.orgId || activeOrg?.id;
+      const data = await apiFetch("/api/rooms/meta/history", { orgId: targetOrgId });
+      setHistoryData(data.history || []);
+      setHistoryModalOpen(true);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
-  const categories = Array.isArray(room?.categories)
-    ? room.categories
-    : JSON.parse(room?.categories || "[]");
+  const openMonitor = () => window.open(`/monitor/${roomCode}`, "_blank");
 
-  if (!room || roomLoading) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "16px",
-        }}
-      >
-        <div style={{ fontSize: "28px", fontWeight: 800 }}>
-          fila<span style={{ color: "var(--primary)" }}>.io</span>
-        </div>
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            border: "3px solid var(--border)",
-            borderTopColor: "var(--primary)",
-            animation: "spin 0.8s linear infinite",
-          }}
-        />
-        <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-          Carregando sala...
-        </p>
-      </div>
-    );
-  }
+  // ── Fechamento Seguro do Dia (Alta 2) ────────────────────────
+  const calledTickets = archive.filter((t) => t.status === "called");
+  const registryTickets = archive.filter((t) =>
+    ["served", "removed_by_host", "left_voluntarily"].includes(t.status)
+  );
+  const totalWait = queue.reduce((s, t) => s + (t.tma || 5), 0);
+  const formatWait = (mins) => (mins === 0 ? "Agora" : `~${mins}min`);
+  const categories = Array.isArray(currentRoom?.categories) ? currentRoom.categories : [];
+
+  const canCloseDay = queue.length === 0 && calledTickets.length === 0;
+
+  const handleExecuteCloseDay = async () => {
+    setClosingDay(true);
+    try {
+      const data = await apiFetch(`/api/rooms/${roomCode}/close`, { method: "POST" });
+      setReport(data.report);
+      setConfirmCloseModalOpen(false);
+      setCloseDayModal(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setClosingDay(false);
+    }
+  };
 
   return (
     <div
       style={{
         minHeight: "100vh",
         background: "var(--bg)",
-        padding: "20px 24px 60px",
+        padding: "16px 20px 40px",
         maxWidth: "1040px",
         margin: "0 auto",
       }}
     >
       {/* ── Top Bar ── */}
-      <header
+      <div
         className="animate-fade"
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: "24px",
+          marginBottom: "16px",
+          paddingTop: "8px",
           flexWrap: "wrap",
-          gap: "14px",
+          gap: "12px",
         }}
       >
         <div>
@@ -267,127 +317,234 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
               display: "flex",
               alignItems: "center",
               gap: "10px",
-              marginBottom: "3px",
+              marginBottom: "4px",
+              flexWrap: "wrap",
             }}
           >
+            <span className="display" style={{ fontSize: "17px", fontWeight: 800 }}>
+              Kiwi<span style={{ color: "var(--accent)" }}>i</span>
+            </span>
+            <span className="tag">HOST</span>
             <span
+              className="tag"
               style={{
-                fontSize: "18px",
-                fontWeight: 800,
-                fontFamily: "var(--font-display)",
+                background: "var(--surface-hover)",
+                color: "var(--text-muted)",
+                borderColor: "var(--border)",
               }}
             >
-              fila<span style={{ color: "var(--primary)" }}>.io</span>
+              {staff.name} · {staff.role === "owner" ? "Dono" : staff.role === "admin" ? "Admin" : "Operador"}
             </span>
-            <span className="tag" style={{ textTransform: "uppercase" }}>
-              {activeOrg?.name}
-            </span>
+
+            {/* Guichê Indicador / Seletor (Alta 5) */}
+            {counters.length > 1 && (
+              <button
+                className="btn"
+                onClick={() => setCounterModalOpen(true)}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "12px",
+                  gap: "6px",
+                  background: myCounter ? "var(--surface)" : "var(--warn-glow)",
+                  borderColor: myCounter ? "var(--border)" : "var(--warn)",
+                  color: myCounter ? "var(--text)" : "var(--warn)",
+                  fontWeight: 600,
+                }}
+              >
+                <Building size={13} />
+                {myCounter ? `Seu Guichê: ${myCounter.name}` : "⚠️ Selecionar Guichê"}
+              </button>
+            )}
           </div>
-          <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-            {room.name}
-          </div>
+          <div style={{ fontSize: "14px", color: "var(--text-muted)" }}>{currentRoom?.name || "Sala"}</div>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <button
-            className="btn btn-secondary"
-            onClick={onBack}
-            style={{ fontSize: "12px", padding: "7px 12px", gap: "5px" }}
-          >
-            <ArrowLeft size={14} /> Voltar
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn" onClick={onBack} style={{ padding: "7px 14px", fontSize: "13px" }}>
+            <ArrowLeft size={14} /> Início
           </button>
           <div
             className="card"
-            style={{
-              padding: "7px 14px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              background: "var(--surface)",
-            }}
+            style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: "8px" }}
           >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                background: "var(--primary)",
-                boxShadow: "0 0 8px var(--primary)",
-              }}
-            />
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)" }} />
             <span
               className="mono"
               style={{
-                fontSize: "13px",
-                color: "var(--primary)",
-                fontWeight: 700,
+                fontSize: "14px",
+                color: "var(--accent)",
+                fontWeight: 600,
                 letterSpacing: "0.15em",
               }}
             >
               {roomCode}
             </span>
           </div>
+
+          <button className="btn" onClick={openMonitor} style={{ padding: "7px 14px", fontSize: "13px" }}>
+            <Monitor size={14} /> Monitor
+          </button>
+
+          <button className="btn" onClick={fetchHistory} style={{ padding: "7px 14px", fontSize: "13px" }}>
+            <History size={14} /> Histórico
+          </button>
+
+          {canViewLogs && (
+            <button className="btn" onClick={fetchLogs} style={{ padding: "7px 14px", fontSize: "13px" }}>
+              <ScrollText size={14} /> Logs
+            </button>
+          )}
+
+          {/* Botão Trancar / Destrancar Fila (Alta 8) */}
           <button
-            className="btn btn-danger"
-            onClick={handleCloseDay}
-            style={{ fontSize: "12px", padding: "7px 14px" }}
+            className="btn"
+            onClick={toggleLock}
+            style={{
+              padding: "7px 14px",
+              fontSize: "13px",
+              gap: "6px",
+              background: locked ? "var(--warn-glow)" : "transparent",
+              borderColor: locked ? "var(--warn)" : "var(--border)",
+              color: locked ? "var(--warn)" : "var(--text)",
+              fontWeight: locked ? 700 : 500,
+            }}
+          >
+            {locked ? (
+              <>
+                <Unlock size={14} /> Destrancar Fila
+              </>
+            ) : (
+              <>
+                <Lock size={14} /> Trancar Fila
+              </>
+            )}
+          </button>
+
+          {/* Botão Encerrar Dia (Alta 2) */}
+          <button
+            className="btn"
+            onClick={() => setConfirmCloseModalOpen(true)}
+            style={{
+              padding: "7px 14px",
+              fontSize: "13px",
+              color: "var(--danger)",
+              borderColor: "var(--danger-glow)",
+              background: "transparent",
+            }}
           >
             Encerrar Dia
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* ── Stats Grid ── */}
+      {/* ── Aviso de Fila Trancada (Alta 8) ── */}
+      {locked && (
+        <div
+          className="animate-fade"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            background: "rgba(245, 158, 11, 0.12)",
+            border: "1px solid var(--warn)",
+            borderRadius: "8px",
+            padding: "12px 18px",
+            color: "var(--warn)",
+            fontSize: "13px",
+            marginBottom: "16px",
+          }}
+        >
+          <Lock size={16} style={{ flexShrink: 0 }} />
+          <div>
+            <strong>Fila trancada:</strong> Novos clientes não podem entrar via aplicativo ou QR Code.
+            Novas senhas manuais ainda podem ser inseridas pelo balcão.
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div
+          className="animate-fade"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "var(--danger-glow)",
+            border: "1px solid var(--danger-glow)",
+            borderRadius: "8px",
+            padding: "10px 16px",
+            color: "var(--danger)",
+            fontSize: "13px",
+            marginBottom: "16px",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <AlertTriangle size={15} /> {error}
+          </span>
+          <button
+            onClick={() => setError("")}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--danger)",
+              cursor: "pointer",
+              display: "flex",
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* ── Estatísticas do Dia ── */}
       <div
         className="animate-fade"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(4, 1fr)",
-          gap: "12px",
+          gap: "10px",
           marginBottom: "20px",
         }}
       >
         {[
-          { label: "Aguardando", value: queue.length, color: "var(--primary)" },
-          { label: "Em Atendimento", value: calledTickets.length, color: "var(--accent)" },
-          { label: "Atendidos Hoje", value: servedCount, color: "var(--success)" },
-          { label: "Tempo Estimado", value: formatWait(totalWait), color: "var(--info)" },
+          { label: "Na Fila", value: queue.length, color: "var(--accent)" },
+          { label: "Em Atendim.", value: calledTickets.length, color: "var(--info)" },
+          {
+            label: "Atendidos Hoje",
+            value: registryTickets.filter((t) => t.status === "served").length,
+            color: "var(--success)",
+          },
+          { label: "Espera Máx", value: formatWait(totalWait), color: "var(--warn)" },
         ].map((s) => (
-          <div
-            key={s.label}
-            className="card"
-            style={{ padding: "16px", textAlign: "center", background: "var(--surface)" }}
-          >
+          <div key={s.label} className="card" style={{ padding: "14px", textAlign: "center" }}>
             <div
+              className="mono"
               style={{
-                fontSize: "11px",
-                color: "var(--text-secondary)",
+                fontSize: "10px",
+                color: "var(--text-muted)",
                 marginBottom: "6px",
                 textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                fontWeight: 600,
+                letterSpacing: "0.08em",
               }}
             >
               {s.label}
             </div>
-            <div
-              className="mono"
-              style={{ fontSize: "24px", fontWeight: 800, color: s.color }}
-            >
+            <div className="mono" style={{ fontSize: "22px", fontWeight: 800, color: s.color }}>
               {s.value}
             </div>
           </div>
         ))}
       </div>
 
-      {/* ── QR Code + Ações Rápidas ── */}
+      {/* ── QR Code + Ações de chamada ── */}
       <div
         className="animate-fade"
         style={{
           display: "grid",
-          gridTemplateColumns: "180px 1fr",
+          gridTemplateColumns: "auto 1fr",
           gap: "16px",
-          marginBottom: "24px",
+          marginBottom: "20px",
         }}
       >
         <div
@@ -397,182 +554,81 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            justifyContent: "center",
             gap: "8px",
-            background: "var(--surface)",
           }}
         >
           <QRDisplay code={roomCode} size={110} />
           <span
             className="mono"
-            style={{
-              fontSize: "10px",
-              color: "var(--text-secondary)",
-              letterSpacing: "0.08em",
-            }}
+            style={{ fontSize: "10px", color: "var(--text-muted)", letterSpacing: "0.08em" }}
           >
-            QR CODE DA SALA
+            QR DA SALA
           </span>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <button
-            className="btn btn-primary"
-            onClick={callNext}
-            disabled={queue.length === 0 || callLoading}
-            style={{
-              flex: 1,
-              minHeight: "58px",
-              fontSize: "16px",
-              fontWeight: 700,
-              gap: "10px",
-              opacity: queue.length === 0 ? 0.6 : 1,
-            }}
-          >
-            {callLoading ? (
-              <>
-                <Radio size={18} className="animate-spin" /> Chamando paciente...
-              </>
-            ) : (
-              <>
-                <Megaphone size={18} /> Chamar Próximo Paciente
-              </>
-            )}
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setManualModal(true)}
-            style={{
-              flex: 1,
-              minHeight: "44px",
-              fontSize: "13px",
-              fontWeight: 600,
-              gap: "8px",
-            }}
-          >
-            <UserPlus size={16} /> Adicionar Paciente Manualmente
-          </button>
-        </div>
-      </div>
-
-      {/* ── Em Atendimento (Prioridade Visual) ── */}
-      {calledTickets.length > 0 && (
-        <div
-          className="card animate-fade"
-          style={{
-            overflow: "hidden",
-            marginBottom: "24px",
-            borderColor: "var(--accent-border)",
-            background: "var(--surface)",
-          }}
-        >
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", justifyContent: "center" }}>
+          {/* Card do Guichê do Operador (Alta 5) */}
           <div
-            style={{
-              padding: "14px 20px",
-              borderBottom: "1px solid var(--border)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              background: "var(--accent-muted)",
-            }}
-          >
-            <h3
-              style={{
-                fontWeight: 700,
-                fontSize: "14px",
-                margin: 0,
-                color: "var(--accent)",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <Bell size={16} /> Em Atendimento
-            </h3>
-            <span
-              className="tag"
-              style={{
-                background: "var(--accent-muted)",
-                color: "var(--accent)",
-                borderColor: "var(--accent-border)",
-              }}
-            >
-              {calledTickets.length} chamado{calledTickets.length > 1 ? "s" : ""}
-            </span>
-          </div>
-
-          <div
+            className="card"
             style={{
               padding: "12px 16px",
               display: "flex",
-              flexDirection: "column",
-              gap: "8px",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+              flexWrap: "wrap",
             }}
           >
-            {calledTickets.map((t) => (
-              <div
-                key={t.token}
-                className="animate-slide"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "12px 16px",
-                  borderRadius: "8px",
-                  background: "var(--surface-alt)",
-                  border: "1px solid var(--border)",
-                }}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <UserCheck size={16} color="var(--accent)" />
+              <span style={{ fontSize: "13px" }}>
+                Operando no guichê:{" "}
+                <strong style={{ color: "var(--text)" }}>
+                  {myCounter?.name || (counters.length === 1 ? counters[0].name : "Nenhum guichê selecionado")}
+                </strong>
+              </span>
+            </div>
+            {counters.length > 1 && (
+              <button
+                className="btn"
+                onClick={() => setCounterModalOpen(true)}
+                style={{ padding: "6px 12px", fontSize: "12px" }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: "8px",
-                      background: "var(--accent-muted)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "var(--accent)",
-                    }}
-                  >
-                    <BellRing size={18} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--text)" }}>
-                      {t.name}
-                    </div>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      {t.category} · Chamado{" "}
-                      {t.calledAt
-                        ? `há ${Math.max(1, Math.round((Date.now() - t.calledAt) / 60000))} min`
-                        : "agora"}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => handleConfirmServed(t.token)}
-                  style={{
-                    padding: "8px 16px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    gap: "6px",
-                  }}
-                >
-                  <Check size={14} strokeWidth={3} /> Concluir Atendimento
-                </button>
-              </div>
-            ))}
+                Trocar Guichê
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              className="btn btn-primary"
+              onClick={callNext}
+              disabled={queue.length === 0 || callLoading}
+              style={{ flex: 1, fontSize: "15px", minHeight: "48px", fontWeight: 700 }}
+            >
+              {callLoading ? (
+                <>
+                  <Loader2 size={16} className="spin" /> Chamando...
+                </>
+              ) : (
+                <>
+                  <Volume2 size={17} /> Chamar Próximo
+                </>
+              )}
+            </button>
+            <button
+              className="btn"
+              onClick={() => setManualModal(true)}
+              style={{ fontSize: "13px", minHeight: "48px", padding: "0 18px" }}
+            >
+              <Plus size={15} /> Adicionar Manualmente
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* ── Fila Ativa ── */}
-      <div
-        className="card animate-fade"
-        style={{ overflow: "hidden", marginBottom: "24px", background: "var(--surface)" }}
-      >
+      <div className="card animate-fade" style={{ overflow: "hidden", marginBottom: "20px" }}>
         <div
           style={{
             padding: "16px 20px",
@@ -582,121 +638,78 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
             justifyContent: "space-between",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Users size={16} style={{ color: "var(--primary)" }} />
-            <h3 style={{ fontWeight: 700, fontSize: "15px", margin: 0 }}>
-              Fila de Espera
-            </h3>
-          </div>
-          <span className="tag">{queue.length} pacientes</span>
+          <h3 style={{ fontSize: "15px" }}>Fila Ativa</h3>
+          <span className="tag">{queue.length} aguardando</span>
         </div>
 
         {queue.length === 0 ? (
-          <div style={{ padding: "48px 24px", textAlign: "center" }}>
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: "50%",
-                background: "var(--primary-muted)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--primary)",
-                margin: "0 auto 14px",
-              }}
-            >
-              <CheckCircle2 size={26} />
-            </div>
-            <div
-              style={{
-                fontWeight: 600,
-                fontSize: "15px",
-                marginBottom: "4px",
-                color: "var(--text)",
-              }}
-            >
-              Fila vazia
-            </div>
-            <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-              Nenhum paciente aguardando no momento.
-            </div>
+          <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
+            <Inbox size={32} style={{ marginBottom: "10px", opacity: 0.6 }} />
+            <div style={{ fontWeight: 600 }}>Fila vazia</div>
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["#", "Paciente", "Categoria", "Prioridade", "Espera Est.", "Ações"].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        style={{
-                          padding: "12px 16px",
-                          textAlign: "left",
-                          fontSize: "11px",
-                          color: "var(--text-secondary)",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.06em",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {h}
-                      </th>
-                    )
-                  )}
+                  {["#", "Nome", "Categoria", "Prioridade", "Espera Est.", "Ações"].map((h) => (
+                    <th
+                      key={h}
+                      className="mono"
+                      style={{
+                        padding: "10px 14px",
+                        textAlign: "left",
+                        fontSize: "10px",
+                        color: "var(--text-muted)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {queue.map((t, i) => (
                   <tr
                     key={t.token}
+                    className="animate-slide"
                     style={{
                       borderBottom: "1px solid var(--border)",
-                      background: i === 0 ? "var(--primary-muted)" : "transparent",
-                      transition: "background 0.15s",
+                      animationDelay: `${i * 0.03}s`,
+                      background: i === 0 ? "var(--accent-light)" : "transparent",
                     }}
                   >
-                    <td style={{ padding: "14px 16px" }}>
+                    <td style={{ padding: "12px 14px" }}>
                       <span
                         className="mono"
                         style={{
                           fontSize: "15px",
                           fontWeight: 700,
-                          color: i === 0 ? "var(--primary)" : "var(--text-secondary)",
+                          color: i === 0 ? "var(--accent)" : "var(--text-muted)",
                         }}
                       >
                         {t.position}
                       </span>
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</span>
-                        {t.manual && (
-                          <span
-                            className="tag"
-                            style={{
-                              background: "var(--info-muted)",
-                              color: "var(--info)",
-                              borderColor: "var(--info-border)",
-                              fontSize: "10px",
-                              padding: "1px 5px",
-                            }}
-                          >
-                            Manual
-                          </span>
-                        )}
-                      </div>
+                    <td style={{ padding: "12px 14px" }}>
+                      <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</span>
+                      {t.manual && (
+                        <span className="tag" style={{ marginLeft: "8px", fontSize: "10px" }}>
+                          Manual
+                        </span>
+                      )}
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-                        {t.category}
-                      </span>
+                    <td style={{ padding: "12px 14px" }}>
+                      <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{t.category}</span>
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
+                    <td style={{ padding: "12px 14px" }}>
                       <select
+                        className="mono"
                         value={t.priority}
-                        onChange={(e) => changePriority(t.token, parseInt(e.target.value))}
+                        onChange={(e) => changePriority(t.token, parseInt(e.target.value, 10))}
                         style={{
                           background: "var(--surface)",
                           border: `1px solid ${getPriorityColor(t.priority)}`,
@@ -704,7 +717,6 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
                           borderRadius: "6px",
                           padding: "4px 8px",
                           fontSize: "12px",
-                          fontWeight: 600,
                           cursor: "pointer",
                           outline: "none",
                         }}
@@ -716,39 +728,27 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
                         ))}
                       </select>
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <span
-                        className="mono"
-                        style={{ fontSize: "13px", color: "var(--accent)" }}
-                      >
+                    <td style={{ padding: "12px 14px" }}>
+                      <span className="mono" style={{ fontSize: "13px", color: "var(--warn)" }}>
                         {formatWait(t.estimatedWait || 0)}
                       </span>
                     </td>
-                    <td style={{ padding: "14px 16px" }}>
+                    <td style={{ padding: "12px 14px" }}>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button
-                          className="btn btn-secondary"
+                          className="btn"
                           onClick={() => callSpecificTicket(t.token)}
-                          style={{
-                            padding: "6px 12px",
-                            fontSize: "12px",
-                            color: "var(--primary)",
-                            borderColor: "var(--primary-border)",
-                          }}
+                          style={{ padding: "6px 10px", fontSize: "12px" }}
                         >
                           Chamar
                         </button>
                         <button
-                          className="btn btn-secondary"
+                          className="btn"
                           onClick={() => removeTicket(t.token)}
-                          style={{
-                            padding: "6px 8px",
-                            color: "var(--danger)",
-                            borderColor: "var(--danger-border)",
-                          }}
-                          title="Remover da fila"
+                          style={{ padding: "6px", color: "var(--danger)", borderColor: "var(--danger-glow)" }}
+                          aria-label="Remover"
                         >
-                          <Trash2 size={13} />
+                          <X size={14} />
                         </button>
                       </div>
                     </td>
@@ -760,12 +760,9 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
         )}
       </div>
 
-      {/* ── Atendidos Hoje ── */}
-      {servedTickets.length > 0 && (
-        <div
-          className="card animate-fade"
-          style={{ overflow: "hidden", marginBottom: "24px", background: "var(--surface)" }}
-        >
+      {/* ── Em Atendimento ── */}
+      {calledTickets.length > 0 && (
+        <div className="card animate-fade" style={{ overflow: "hidden", marginBottom: "20px" }}>
           <div
             style={{
               padding: "16px 20px",
@@ -775,39 +772,86 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
               justifyContent: "space-between",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <CheckCircle2 size={16} style={{ color: "var(--success)" }} />
-              <h3 style={{ fontWeight: 700, fontSize: "15px", margin: 0 }}>
-                Atendidos na Sessão
-              </h3>
-            </div>
-            <span
-              className="tag"
-              style={{
-                background: "var(--success-muted)",
-                color: "var(--success)",
-                borderColor: "var(--success-border)",
-              }}
-            >
-              {servedTickets.length} atendido{servedTickets.length > 1 ? "s" : ""}
+            <h3 style={{ fontSize: "15px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <Volume2 size={16} color="var(--info)" /> Em Atendimento
+            </h3>
+            <span className="tag" style={{ background: "var(--accent-light)", color: "var(--info)" }}>
+              {calledTickets.length}
             </span>
           </div>
+          <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+            {calledTickets.map((t) => (
+              <div
+                key={t.token}
+                className="animate-slide"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 16px",
+                  borderRadius: "10px",
+                  background: "var(--surface-hover)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</div>
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                    {t.category} · {t.counter || "Balcão"}
+                  </div>
+                </div>
+                <button
+                  className="btn"
+                  onClick={() => confirmServed(t.token)}
+                  style={{
+                    background: "var(--success)",
+                    color: "#06231A",
+                    borderColor: "var(--success)",
+                    padding: "8px 14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                  }}
+                >
+                  <Check size={14} /> Confirmar Atendimento
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
+      {/* ── Registro do Dia (Histórico recente com rechamada) ── */}
+      {registryTickets.length > 0 && (
+        <div className="card animate-fade" style={{ overflow: "hidden" }}>
+          <div
+            style={{
+              padding: "16px 20px",
+              borderBottom: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <h3 style={{ fontSize: "15px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <ClipboardList size={16} /> Registro do Dia
+            </h3>
+            <span className="tag">{registryTickets.length}</span>
+          </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["Paciente", "Categoria", "Horário", "Ações"].map((h) => (
+                  {["Nome", "Categoria", "Status", "Guichê", "Horário", "Ações"].map((h) => (
                     <th
                       key={h}
+                      className="mono"
                       style={{
-                        padding: "10px 16px",
+                        padding: "10px 14px",
                         textAlign: "left",
-                        fontSize: "11px",
-                        color: "var(--text-secondary)",
+                        fontSize: "10px",
+                        color: "var(--text-muted)",
                         textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                        fontWeight: 600,
+                        letterSpacing: "0.08em",
                       }}
                     >
                       {h}
@@ -816,318 +860,326 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
                 </tr>
               </thead>
               <tbody>
-                {servedTickets.map((t, i) => (
-                  <tr
-                    key={t.token || i}
-                    style={{
-                      borderBottom: "1px solid var(--border)",
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <td style={{ padding: "12px 16px" }}>
-                      <span style={{ fontWeight: 600, fontSize: "14px" }}>
-                        {t.name || "—"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "12px 16px" }}>
-                      <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-                        {t.category || "—"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "12px 16px" }}>
-                      <span
-                        className="mono"
-                        style={{ fontSize: "12px", color: "var(--text-dim)" }}
-                      >
-                        {t.servedAt
-                          ? new Date(t.servedAt).toLocaleTimeString("pt-BR", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "—"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "12px 16px" }}>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => setSelectedServed(t)}
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: "12px",
-                          gap: "4px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        Ações <ChevronDown size={12} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {registryTickets.map((t, i) => {
+                  const badge = STATUS_BADGE[t.status] || {
+                    label: t.status,
+                    Icon: Check,
+                    color: "var(--text-muted)",
+                    bg: "transparent",
+                  };
+                  const timeShown = t.servedAt || t.removedAt || t.leftAt || t.joinedAt;
+                  return (
+                    <tr
+                      key={t.token}
+                      className="animate-slide"
+                      style={{
+                        borderBottom: "1px solid var(--border)",
+                        animationDelay: `${i * 0.02}s`,
+                      }}
+                    >
+                      <td style={{ padding: "12px 14px" }}>
+                        <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</span>
+                      </td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{t.category}</span>
+                      </td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <span
+                          className="tag"
+                          style={{
+                            background: badge.bg,
+                            color: badge.color,
+                            borderColor: badge.bg,
+                            fontSize: "11px",
+                          }}
+                        >
+                          <badge.Icon size={11} /> {badge.label}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                          {t.counter || "—"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <span className="mono" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+                          {new Date(timeShown).toLocaleTimeString("pt-BR")}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <button
+                          className="btn"
+                          onClick={() => setRecallTarget(t)}
+                          style={{ padding: "6px 12px", fontSize: "12px" }}
+                        >
+                          <RotateCcw size={13} /> Chamar de Volta
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* ── Modal: Adicionar Manualmente ── */}
-      <Modal open={manualModal} onClose={() => setManualModal(false)}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: "8px",
-              background: "var(--primary-muted)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--primary)",
-            }}
-          >
-            <UserPlus size={18} />
-          </div>
-          <h3 style={{ fontWeight: 700, fontSize: "18px", margin: 0 }}>
-            Adicionar Paciente Manualmente
-          </h3>
+      {/* ── Modal: Seleção de Guichê (Alta 5) ── */}
+      <Modal open={counterModalOpen} onClose={() => setCounterModalOpen(false)} maxWidth="480px">
+        <h3 style={{ marginBottom: "8px", fontSize: "17px" }}>Escolha seu Guichê</h3>
+        <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "20px" }}>
+          Selecione em qual guichê você irá atender. Cada funcionário opera um guichê individual.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
+          {counters.map((c) => {
+            const claim = counterClaims[c.id];
+            const isMine = myCounter?.id === c.id;
+            const isTaken = claim && !isMine;
+
+            return (
+              <div
+                key={c.id}
+                className="card"
+                style={{
+                  padding: "14px 18px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  background: isMine
+                    ? "var(--accent-glow)"
+                    : isTaken
+                    ? "var(--surface-hover)"
+                    : "var(--surface)",
+                  borderColor: isMine ? "var(--accent)" : "var(--border)",
+                  opacity: isTaken ? 0.7 : 1,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text)" }}>{c.name}</div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                    {isMine
+                      ? "Seu guichê atual"
+                      : isTaken
+                      ? `Em uso por: ${claim.name}`
+                      : "Livre para atendimento"}
+                  </div>
+                </div>
+
+                {isMine ? (
+                  <span className="tag" style={{ background: "var(--accent)", color: "#04141C" }}>
+                    Ativo
+                  </span>
+                ) : isTaken ? (
+                  <span className="tag" style={{ background: "transparent", color: "var(--text-muted)" }}>
+                    Ocupado
+                  </span>
+                ) : (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => claimCounterAction(c.id)}
+                    style={{ padding: "6px 14px", fontSize: "12px" }}
+                  >
+                    Assumir Guichê
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        <label
-          style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            color: "var(--text-secondary)",
-            display: "block",
-            marginBottom: "6px",
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-          }}
+        <button
+          className="btn"
+          onClick={() => setCounterModalOpen(false)}
+          style={{ width: "100%", padding: "10px", fontSize: "13px" }}
         >
-          Nome do Paciente
-        </label>
-        <input
-          className="input"
-          placeholder="Nome completo"
-          value={manualForm.name}
-          onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
-          onKeyDown={(e) => e.key === "Enter" && addManual()}
-          autoFocus
-          style={{ marginBottom: "16px" }}
-        />
+          Fechar
+        </button>
+      </Modal>
 
-        <label
-          style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            color: "var(--text-secondary)",
-            display: "block",
-            marginBottom: "6px",
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-          }}
-        >
-          Categoria de Atendimento
-        </label>
-        <select
-          className="input"
-          value={manualForm.category}
-          onChange={(e) => setManualForm({ ...manualForm, category: e.target.value })}
-          style={{ marginBottom: "24px" }}
-        >
-          {categories.map((c) => (
-            <option key={c.name} value={c.name}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+      {/* ── Modal: Adicionar Manualmente (Média 5) ── */}
+      <Modal open={manualModal} onClose={() => setManualModal(false)}>
+        <h3 style={{ marginBottom: "18px" }}>Adicionar Manualmente</h3>
+        <div style={{ marginBottom: "14px" }}>
+          <label
+            className="mono"
+            style={{
+              fontSize: "11px",
+              color: "var(--text-muted)",
+              display: "block",
+              marginBottom: "6px",
+              textTransform: "uppercase",
+            }}
+          >
+            Nome do Cliente
+          </label>
+          <input
+            className="input"
+            placeholder="Nome completo"
+            value={manualForm.name}
+            onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
+            autoFocus
+          />
+        </div>
+        <div style={{ marginBottom: "14px" }}>
+          <label
+            className="mono"
+            style={{
+              fontSize: "11px",
+              color: "var(--text-muted)",
+              display: "block",
+              marginBottom: "6px",
+              textTransform: "uppercase",
+            }}
+          >
+            Categoria
+          </label>
+          <select
+            className="input"
+            value={manualForm.category}
+            onChange={(e) => setManualForm({ ...manualForm, category: e.target.value })}
+          >
+            {categories.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {currentRoom?.customFields?.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
+            {currentRoom.customFields.map((field) => (
+              <CustomFieldInput
+                key={field.id}
+                field={field}
+                value={manualCustom[field.id]}
+                onChange={(v) => setManualCustom({ ...manualCustom, [field.id]: v })}
+              />
+            ))}
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: "10px" }}>
           <button
-            className="btn btn-secondary"
+            className="btn"
             onClick={() => setManualModal(false)}
-            style={{ flex: 1, padding: "12px", fontSize: "13px" }}
+            style={{ flex: 1, padding: "12px" }}
           >
             Cancelar
           </button>
           <button
             className="btn btn-primary"
             onClick={addManual}
-            style={{ flex: 2, padding: "12px", fontSize: "13px", fontWeight: 700 }}
+            style={{ flex: 2, padding: "12px", fontWeight: 700 }}
           >
             Adicionar à Fila
           </button>
         </div>
       </Modal>
 
-      {/* ── Popup: Ações sobre ticket atendido ── */}
-      {selectedServed && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 100,
-            background: "rgba(0,0,0,0.7)",
-            backdropFilter: "blur(6px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "24px",
-          }}
-          onClick={(e) => e.target === e.currentTarget && setSelectedServed(null)}
-        >
-          <div
-            className="card animate-fade"
-            style={{
-              background: "var(--surface)",
-              width: "100%",
-              maxWidth: "420px",
-              padding: "28px",
-              position: "relative",
-            }}
-          >
-            <button
-              onClick={() => setSelectedServed(null)}
-              style={{
-                position: "absolute",
-                top: "16px",
-                right: "16px",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-secondary)",
-                display: "flex",
-              }}
-            >
-              <X size={18} />
-            </button>
+      {/* ── Modal de Confirmação para Encerrar Dia (Alta 2) ── */}
+      <Modal open={confirmCloseModalOpen} onClose={() => setConfirmCloseModalOpen(false)} maxWidth="480px">
+        <h3 style={{ fontSize: "18px", marginBottom: "12px" }}>Encerrar Expediente</h3>
 
+        {!canCloseDay ? (
+          <div>
             <div
               style={{
                 display: "flex",
-                alignItems: "center",
-                gap: "14px",
+                alignItems: "flex-start",
+                gap: "12px",
+                background: "var(--danger-glow)",
+                border: "1px solid var(--danger-glow)",
+                borderRadius: "8px",
+                padding: "16px",
                 marginBottom: "20px",
+                color: "var(--danger)",
               }}
             >
-              <div
-                style={{
-                  width: 44,
-                  height: 44,
-                  background: "var(--success-muted)",
-                  border: "1px solid var(--success-border)",
-                  borderRadius: "10px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--success)",
-                  flexShrink: 0,
-                }}
-              >
-                <CheckCircle2 size={22} />
-              </div>
+              <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: "2px" }} />
               <div>
-                <div style={{ fontWeight: 700, fontSize: "16px" }}>
-                  {selectedServed.name || "—"}
+                <div style={{ fontWeight: 700, fontSize: "14px", marginBottom: "4px" }}>
+                  A fila ainda não está vazia!
                 </div>
-                <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                  {selectedServed.category} · Atendido às{" "}
-                  {selectedServed.servedAt
-                    ? new Date(selectedServed.servedAt).toLocaleTimeString("pt-BR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : "—"}
+                <div style={{ fontSize: "13px", lineHeight: "1.5" }}>
+                  Ainda constam:
+                  <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+                    {queue.length > 0 && <li>{queue.length} cliente(s) aguardando na fila.</li>}
+                    {calledTickets.length > 0 && (
+                      <li>{calledTickets.length} cliente(s) em atendimento no momento.</li>
+                    )}
+                  </ul>
+                  Conclua os atendimentos ou remova todos antes de encerrar o expediente.
                 </div>
               </div>
             </div>
 
-            <p
-              style={{
-                fontSize: "13px",
-                color: "var(--text-secondary)",
-                marginBottom: "18px",
-              }}
+            <button
+              className="btn"
+              onClick={() => setConfirmCloseModalOpen(false)}
+              style={{ width: "100%", padding: "12px", fontSize: "14px", fontWeight: 600 }}
             >
-              Selecione o procedimento para este paciente:
+              Entendido, voltar à fila
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "24px", lineHeight: "1.5" }}>
+              Todos os clientes do dia foram atendidos ou removidos. Tem certeza de que deseja finalizar o
+              dia de hoje? A sala será encerrada e um relatório detalhado será gerado.
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", gap: "10px" }}>
               <button
-                onClick={() => handleRecallServed(selectedServed)}
-                className="btn btn-secondary"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  padding: "14px 16px",
-                  textAlign: "left",
-                  borderColor: "var(--accent-border)",
-                  background: "var(--accent-muted)",
-                  width: "100%",
-                }}
-              >
-                <BellRing size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      color: "var(--accent)",
-                      fontSize: "13px",
-                    }}
-                  >
-                    Chamar de Volta ao Atendimento
-                  </div>
-                  <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Retorna diretamente ao guichê ativo
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleReadmit(selectedServed)}
-                className="btn btn-secondary"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  padding: "14px 16px",
-                  textAlign: "left",
-                  borderColor: "var(--primary-border)",
-                  background: "var(--primary-muted)",
-                  width: "100%",
-                }}
-              >
-                <RotateCcw size={20} style={{ color: "var(--primary)", flexShrink: 0 }} />
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      color: "var(--primary)",
-                      fontSize: "13px",
-                    }}
-                  >
-                    Recolocar na Fila de Espera
-                  </div>
-                  <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Gera nova posição na categoria {selectedServed.category}
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setSelectedServed(null)}
-                className="btn btn-secondary"
-                style={{ width: "100%", padding: "10px", fontSize: "13px", marginTop: "6px" }}
+                className="btn"
+                onClick={() => setConfirmCloseModalOpen(false)}
+                style={{ flex: 1, padding: "12px" }}
+                disabled={closingDay}
               >
                 Cancelar
               </button>
+              <button
+                className="btn"
+                onClick={handleExecuteCloseDay}
+                disabled={closingDay}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  background: "var(--danger)",
+                  color: "#fff",
+                  borderColor: "var(--danger)",
+                  fontWeight: 700,
+                }}
+              >
+                {closingDay ? "Encerrando..." : "Sim, Encerrar Dia"}
+              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
-      {/* ── Modal: Relatório de Encerramento ── */}
+      {/* ── Modal de Rechamada (Média 1) ── */}
+      <RecallModal
+        open={!!recallTarget}
+        onClose={() => setRecallTarget(null)}
+        ticket={recallTarget}
+        counters={counters}
+        myCounterName={myCounter?.name}
+        onRecall={handleRecall}
+      />
+
+      {/* ── Modal de Logs de Auditoria (Média 4) ── */}
+      <LogsModal open={logsModalOpen} onClose={() => setLogsModalOpen(false)} logs={logs} />
+
+      {/* ── Modal de Histórico de Sessões (Média 6) ── */}
+      <HistoryModal
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        history={historyData}
+      />
+
+      {/* ── Modal: Relatório Final pós Encerramento (Alta 2 & Média 4/6) ── */}
       <Modal open={closeDayModal} onClose={() => {}} maxWidth="500px">
         {report && (
           <>
@@ -1136,29 +1188,21 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
                 style={{
                   width: 56,
                   height: 56,
-                  borderRadius: "12px",
-                  background: "var(--primary-muted)",
+                  borderRadius: "14px",
+                  background: "var(--accent-light)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "var(--primary)",
-                  margin: "0 auto 12px",
+                  margin: "0 auto 14px",
                 }}
               >
-                <BarChart3 size={28} />
+                <ClipboardList size={26} color="var(--accent)" />
               </div>
-              <h2 style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 4px" }}>
-                Relatório da Sessão
-              </h2>
-              <p
-                className="mono"
-                style={{ color: "var(--text-secondary)", fontSize: "12px", margin: 0 }}
-              >
-                {report.room_name} ·{" "}
-                {new Date(report.generated_at).toLocaleDateString("pt-BR")}
+              <h2>Relatório da Sessão</h2>
+              <p className="mono" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                {report.roomName} · {new Date(report.date).toLocaleDateString("pt-BR")}
               </p>
             </div>
-
             <div
               style={{
                 display: "grid",
@@ -1168,76 +1212,57 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
               }}
             >
               {[
-                { label: "Atendidos", value: report.total_served, color: "var(--success)" },
-                { label: "Abandonos", value: report.total_abandoned, color: "var(--danger)" },
-                { label: "Espera Média", value: `${report.avg_wait_minutes} min`, color: "var(--accent)" },
-                { label: "Código da Sala", value: report.room_code, color: "var(--primary)" },
+                { label: "Atendidos", value: report.totalServed, color: "var(--success)" },
+                { label: "Removidos", value: report.totalRemovedByHost, color: "var(--danger)" },
+                { label: "Saíram", value: report.totalLeftVoluntarily, color: "var(--warn)" },
+                { label: "Espera Média", value: `${report.avgWaitMinutes}min`, color: "var(--info)" },
               ].map((s) => (
                 <div
                   key={s.label}
                   style={{
-                    background: "var(--surface-alt)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
+                    background: "var(--surface-hover)",
+                    borderRadius: "10px",
                     padding: "14px",
                     textAlign: "center",
                   }}
                 >
                   <div
-                    style={{
-                      fontSize: "10px",
-                      color: "var(--text-secondary)",
-                      marginBottom: "4px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      fontWeight: 600,
-                    }}
+                    className="mono"
+                    style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "4px" }}
                   >
                     {s.label}
                   </div>
-                  <div
-                    className="mono"
-                    style={{ fontSize: "22px", fontWeight: 800, color: s.color }}
-                  >
+                  <div className="mono" style={{ fontSize: "22px", fontWeight: 800, color: s.color }}>
                     {s.value}
                   </div>
                 </div>
               ))}
             </div>
-
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-                marginBottom: "16px",
-              }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
               <button
-                className="btn btn-secondary"
+                className="btn"
                 onClick={() => exportToCSV(report)}
-                style={{ padding: "12px", fontSize: "13px", gap: "8px", fontWeight: 600 }}
+                style={{ padding: "14px", fontWeight: 700 }}
               >
-                <Download size={15} /> Exportar como Arquivo CSV
+                <Download size={16} /> Baixar como .CSV
               </button>
               <button
-                className="btn btn-secondary"
+                className="btn"
                 onClick={() => exportToJSON(report)}
-                style={{ padding: "12px", fontSize: "13px", gap: "8px", fontWeight: 600 }}
+                style={{ padding: "14px", fontWeight: 700 }}
               >
-                <Download size={15} /> Exportar como Arquivo JSON
+                <Download size={16} /> Baixar como .JSON
               </button>
             </div>
-
             <button
-              className="btn btn-danger"
+              className="btn btn-primary"
               onClick={() => {
                 setCloseDayModal(false);
                 onCloseDay();
               }}
-              style={{ width: "100%", padding: "12px", fontSize: "13px", gap: "6px" }}
+              style={{ width: "100%", padding: "12px" }}
             >
-              <LogOut size={14} /> Encerrar Sessão e Retornar ao Início
+              Concluir e Voltar ao Início
             </button>
           </>
         )}

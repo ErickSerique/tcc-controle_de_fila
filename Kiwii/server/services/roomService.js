@@ -1,268 +1,237 @@
 /**
- * services/roomService.js
+ * roomService.js — Gerenciador de salas de atendimento.
  *
- * Gerencia salas de atendimento.
- *
- * Estratégia de dados:
- *   PostgreSQL → fonte da verdade (persistência)
- *   Redis      → cache da fila ativa (velocidade < 200ms)
- *
- * O código público de 6 chars é gerado aqui e garantido único no banco.
+ * room.orgId → organização dona · room.queue → aguardando · room.archive → todos que já
+ * saíram da fila · room.logs → auditoria · room.counters → guichês · room.customFields
+ * room.priorityRule → { batchSize } · room.locked → fila trancada
+ * room.counterClaims → { [counterId]: { socketId, name } } quem opera cada guichê
  */
-const { pool } = require("../config/db");
-const redis = require("../config/redis");
+const { v4: uuidv4 } = require("uuid");
+const { logAction } = require("./logService");
 
-const QUEUE_KEY = (code) => `queue:${code}`;
-const ROOM_KEY  = (code) => `room:${code}`;
+const rooms = new Map();
+const history = [];
 
-// ── Helpers ───────────────────────────────────────────────────────
+const DEFAULT_COUNTERS = [{ id: "default", name: "Guichê Único" }];
+const DEFAULT_PRIORITY_BATCH_SIZE = 3;
 
-/** Gera código alfanumérico de 6 chars, verifica unicidade no banco. */
-const generateCode = async () => {
+const generateCode = () => {
   let code;
-  let attempts = 0;
   do {
     code = Math.random().toString(36).substr(2, 6).toUpperCase();
-    const { rows } = await pool.query("SELECT id FROM rooms WHERE code = $1", [code]);
-    if (rows.length === 0) return code;
-    attempts++;
-  } while (attempts < 10);
-  throw new Error("Não foi possível gerar um código único. Tente novamente.");
+  } while (rooms.has(code));
+  return code;
 };
 
 /**
- * Algoritmo de fila priorizada com previsão de espera.
- * Ordenação: prioridade DESC → joinedAt ASC (FIFO na mesma prioridade).
- * Complexidade: O(n log n)
- *
- * @param {Array}  queue        - Tickets na fila
- * @param {Object} [dynamicTma] - Mapa de { category: avgMinutos } com TMA real
- *                                 calculado a partir dos atendimentos já realizados.
- *                                 Quando disponível, substitui o tma estático da categoria.
+ * Padrão: prioridade DESC → FIFO. Com priorityRule.batchSize (X) > 0 e prioridade alta (3)
+ * e média (2) esperando, intercala em blocos de X (X altas, X médias, repete).
+ * Prioridade baixa (1) segue por último.
  */
-const recalcPositions = (queue, dynamicTma = null) => {
-  queue.sort((a, b) => {
-    if (b.priority !== a.priority) return b.priority - a.priority;
-    return a.joinedAt - b.joinedAt;
-  });
+const recalcPositions = (queue, priorityRule) => {
+  const batchSize = priorityRule?.batchSize > 0 ? priorityRule.batchSize : 0;
+  const byPriority = (p) =>
+    queue.filter((t) => t.priority === p).sort((a, b) => a.joinedAt - b.joinedAt);
+  const high = byPriority(3),
+    medium = byPriority(2),
+    low = byPriority(1);
+
+  let ordered;
+  if (batchSize > 0 && high.length > 0 && medium.length > 0) {
+    ordered = [];
+    const hi = [...high],
+      med = [...medium];
+    while (hi.length || med.length) {
+      ordered.push(...hi.splice(0, batchSize));
+      ordered.push(...med.splice(0, batchSize));
+    }
+    ordered.push(...low);
+  } else {
+    ordered = [...high, ...medium, ...low];
+  }
+
+  queue.length = 0; // mantém a referência do array
+  queue.push(...ordered);
 
   let accumulated = 0;
   queue.forEach((ticket, i) => {
     ticket.position = i + 1;
     ticket.estimatedWait = accumulated;
-
-    // Usa TMA dinâmico se disponível para a categoria, senão usa o estático
-    const effectiveTma = (dynamicTma && dynamicTma[ticket.category] != null)
-      ? Math.round(dynamicTma[ticket.category])
-      : ticket.tma;
-    accumulated += effectiveTma;
+    accumulated += ticket.tma;
   });
-
   return queue;
 };
 
-// ── Cache Redis helpers ───────────────────────────────────────────
+const createRoom = ({
+  name,
+  orgId,
+  hostId,
+  categories,
+  counters,
+  customFields,
+  priorityBatchSize,
+  actor,
+}) => {
+  const code = generateCode();
+  const room = {
+    code,
+    name: name?.trim() || `Sala ${code}`,
+    orgId: orgId ?? null,
+    hostId: hostId ?? null,
+    active: true,
+    locked: false,
+    categories: categories || [
+      { name: "Atendimento Geral", priority: 1, tma: 10 },
+      { name: "Prioritário", priority: 3, tma: 5 },
+    ],
+    counters:
+      Array.isArray(counters) && counters.length > 0
+        ? counters
+        : DEFAULT_COUNTERS.map((c) => ({ ...c })),
+    customFields: Array.isArray(customFields) ? customFields : [],
+    priorityRule: {
+      batchSize:
+        typeof priorityBatchSize === "number" && priorityBatchSize >= 0
+          ? priorityBatchSize
+          : DEFAULT_PRIORITY_BATCH_SIZE,
+    },
+    counterClaims: {},
+    queue: [],
+    archive: [],
+    logs: [],
+    createdAt: Date.now(),
+  };
 
-const cacheQueue = async (code, queue) => {
-  await redis.setex(QUEUE_KEY(code), 3600 * 8, JSON.stringify(queue));
-};
-
-const getCachedQueue = async (code) => {
-  const raw = await redis.get(QUEUE_KEY(code));
-  return raw ? JSON.parse(raw) : null;
-};
-
-const cacheRoom = async (room) => {
-  await redis.setex(ROOM_KEY(room.code), 3600 * 8, JSON.stringify(room));
-};
-
-const getCachedRoom = async (code) => {
-  const raw = await redis.get(ROOM_KEY(code));
-  return raw ? JSON.parse(raw) : null;
-};
-
-// ── Service API ───────────────────────────────────────────────────
-
-const createRoom = async ({ orgId, name, categories, userId }) => {
-  const code = await generateCode();
-
-  const { rows } = await pool.query(
-    `INSERT INTO rooms (org_id, code, name, categories, opened_by)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING *`,
-    [orgId, code, name, JSON.stringify(categories), userId]
-  );
-  const room = rows[0];
-
-  // Inicializa fila vazia no Redis
-  await cacheQueue(code, []);
-  await cacheRoom(room);
-
+  rooms.set(code, room);
+  logAction(room, actor, "room.created", { name: room.name, orgId: room.orgId });
   return room;
 };
 
-const getRoom = async (code) => {
-  // Tenta Redis primeiro
-  const cached = await getCachedRoom(code?.toUpperCase());
-  if (cached) return cached;
-
-  const { rows } = await pool.query(
-    "SELECT * FROM rooms WHERE code = $1",
-    [code?.toUpperCase()]
-  );
-  if (rows[0]) await cacheRoom(rows[0]);
-  return rows[0] ?? null;
+const getRoom = (code) => {
+  if (!code) return null;
+  return rooms.get(code.toString().trim().toUpperCase()) ?? null;
 };
 
-const roomExists = async (code) => {
-  const room = await getRoom(code);
-  return Boolean(room && room.active);
+const roomExists = (code) => {
+  if (!code) return false;
+  const room = rooms.get(code.toString().trim().toUpperCase());
+  return !!room && room.active;
 };
 
-const listOrgRooms = async (orgId, { activeOnly = false } = {}) => {
-  const { rows } = await pool.query(
-    `SELECT r.*,
-            (SELECT COUNT(*) FROM tickets t WHERE t.room_id = r.id AND t.status = 'waiting') AS queue_length,
-            (SELECT COUNT(*) FROM tickets t WHERE t.room_id = r.id AND t.status = 'served') AS served_count
-     FROM rooms r
-     WHERE r.org_id = $1 ${activeOnly ? "AND r.active = TRUE" : ""}
-     ORDER BY r.created_at DESC`,
-    [orgId]
-  );
-  return rows;
+const listActiveRooms = (orgId) => {
+  const list = [];
+  for (const room of rooms.values()) {
+    if (room.active && (!orgId || room.orgId === orgId)) {
+      list.push({
+        code: room.code,
+        name: room.name,
+        orgId: room.orgId,
+        counters: room.counters,
+        queueLength: room.queue.length,
+        createdAt: room.createdAt,
+        locked: !!room.locked,
+      });
+    }
+  }
+  return list;
 };
 
 /**
- * Encerra o dia: persiste o relatório, marca a sala como inativa,
- * limpa o cache Redis.
+ * Encerra o dia: valida se a fila e os atendimentos estão zerados antes de fechar.
  */
-const closeDay = async (code, { closedByUserId }) => {
-  const room = await getRoom(code);
+const closeDay = (code, actor) => {
+  const room = getRoom(code);
   if (!room) throw new Error("Sala não encontrada.");
   if (!room.active) throw new Error("Sala já encerrada.");
 
-  const queue = (await getCachedQueue(code)) || [];
-
-  // Marca tickets ainda em espera na fila como 'abandoned'
-  if (queue.length > 0) {
-    const tokens = queue.map((t) => t.token);
-    await pool.query(
-      `UPDATE tickets SET status = 'abandoned'
-       WHERE token = ANY($1::text[])`,
-      [tokens]
+  const waitingCount = room.queue.filter((t) => t.status === "waiting").length;
+  if (waitingCount > 0) {
+    throw new Error(
+      `Não é possível encerrar: ainda há ${waitingCount} na fila. Atenda ou remova todos antes de fechar.`
     );
   }
 
-  // Tickets com status 'called' foram chamados mas o dia encerrou antes
-  // da confirmação — contam como atendidos para fins de relatório
-  await pool.query(
-    `UPDATE tickets
-     SET status = 'served', called_at = COALESCE(called_at, NOW())
-     WHERE room_id = $1 AND status = 'called'`,
-    [room.id]
-  );
+  const calledCount = room.queue.filter((t) => t.status === "called").length;
+  if (calledCount > 0) {
+    throw new Error(
+      `Não é possível encerrar: ainda há ${calledCount} em atendimento. Finalize os atendimentos antes de fechar.`
+    );
+  }
 
-  // Calcula métricas para o relatório
-  // avg_wait usa a diferença entre called_at e joined_at para todos os atendidos
-  const { rows: servedRows } = await pool.query(
-    `SELECT called_at, joined_at FROM tickets
-     WHERE room_id = $1 AND status = 'served' AND called_at IS NOT NULL AND joined_at IS NOT NULL`,
-    [room.id]
-  );
+  const servedTickets = room.archive.filter((t) => t.status === "served");
+  const waitTimes = servedTickets
+    .filter((t) => t.calledAt && t.joinedAt)
+    .map((t) => (t.calledAt - t.joinedAt) / 60_000);
 
-  const waitTimes = servedRows
-    .map((t) => (new Date(t.called_at) - new Date(t.joined_at)) / 60_000)
-    .filter((w) => w >= 0); // ignora valores negativos por dessincronia de relógio
+  const report = {
+    id: uuidv4(),
+    orgId: room.orgId,
+    roomCode: room.code,
+    roomName: room.name,
+    date: new Date().toISOString(),
+    totalServed: servedTickets.length,
+    totalRemovedByHost: room.archive.filter((t) => t.status === "removed_by_host").length,
+    totalLeftVoluntarily: room.archive.filter((t) => t.status === "left_voluntarily").length,
+    totalAbandonedInQueue: 0,
+    avgWaitMinutes:
+      waitTimes.length > 0
+        ? parseFloat((waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length).toFixed(1))
+        : 0,
+    tickets: [...room.archive],
+  };
 
-  const avgWait =
-    waitTimes.length > 0
-      ? parseFloat((waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length).toFixed(1))
-      : 0;
-
-  const { rows: countRows } = await pool.query(
-    `SELECT
-       COUNT(*) FILTER (WHERE status = 'served')    AS served,
-       COUNT(*) FILTER (WHERE status = 'abandoned') AS abandoned
-     FROM tickets WHERE room_id = $1`,
-    [room.id]
-  );
-
-  // Salva relatório
-  const { rows: reportRows } = await pool.query(
-    `INSERT INTO session_reports
-       (org_id, room_id, room_code, room_name, total_served, total_abandoned, avg_wait_minutes, generated_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING *`,
-    [
-      room.org_id,
-      room.id,
-      room.code,
-      room.name,
-      parseInt(countRows[0].served),
-      parseInt(countRows[0].abandoned),
-      avgWait,
-      closedByUserId,
-    ]
-  );
-
-  // Fecha a sala
-  await pool.query(
-    `UPDATE rooms SET active = FALSE, closed_at = NOW(), closed_by = $2 WHERE id = $1`,
-    [room.id, closedByUserId]
-  );
-
-  // Limpa cache
-  await redis.del(QUEUE_KEY(code), ROOM_KEY(code));
-
-  // Inclui tickets no relatório para download
-  const { rows: tickets } = await pool.query(
-    "SELECT * FROM tickets WHERE room_id = $1 ORDER BY joined_at",
-    [room.id]
-  );
-
-  return { ...reportRows[0], tickets };
+  room.active = false;
+  room.queue = [];
+  logAction(room, actor, "room.closed", { totalServed: report.totalServed });
+  history.push(report);
+  return report;
 };
 
-const getHistory = async (orgId) => {
-  const { rows } = await pool.query(
-    `SELECT sr.*, up.name AS generated_by_name
-     FROM session_reports sr
-     LEFT JOIN user_profiles up ON up.id = sr.generated_by
-     WHERE sr.org_id = $1
-     ORDER BY sr.generated_at DESC`,
-    [orgId]
-  );
-  return rows;
+const getHistory = (orgId) =>
+  history
+    .filter((h) => !orgId || h.orgId === orgId)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+const getHistorySession = (sessionId) => history.find((h) => h.id === sessionId) ?? null;
+
+// ── Guichês ─────────────────────────────────────────────────────
+const claimCounter = (room, counterId, socketId, name) => {
+  const counter = room.counters.find((c) => c.id === counterId);
+  if (!counter) throw new Error("Guichê inválido para esta sala.");
+  const current = room.counterClaims[counterId];
+  if (current && current.socketId !== socketId) {
+    throw new Error(`O guichê "${counter.name}" já está em uso por ${current.name}.`);
+  }
+  for (const [id, claim] of Object.entries(room.counterClaims)) {
+    if (claim.socketId === socketId && id !== counterId) delete room.counterClaims[id];
+  }
+  room.counterClaims[counterId] = { socketId, name };
+  return { ...room.counterClaims };
 };
 
-const getSessionReport = async (reportId, orgId) => {
-  const { rows: reportRows } = await pool.query(
-    `SELECT sr.*, up.name AS generated_by_name
-     FROM session_reports sr
-     LEFT JOIN user_profiles up ON up.id = sr.generated_by
-     WHERE sr.id = $1 AND sr.org_id = $2`,
-    [reportId, orgId]
-  );
-  if (!reportRows[0]) return null;
-
-  const report = reportRows[0];
-  const { rows: tickets } = await pool.query(
-    `SELECT * FROM tickets WHERE room_id = $1 ORDER BY joined_at ASC`,
-    [report.room_id]
-  );
-
-  return { ...report, tickets };
+const releaseCounterBySocket = (room, socketId) => {
+  let changed = false;
+  for (const [id, claim] of Object.entries(room.counterClaims)) {
+    if (claim.socketId === socketId) {
+      delete room.counterClaims[id];
+      changed = true;
+    }
+  }
+  return changed;
 };
 
 module.exports = {
+  rooms,
   createRoom,
   getRoom,
   roomExists,
-  listOrgRooms,
+  listActiveRooms,
   recalcPositions,
-  cacheQueue,
-  getCachedQueue,
   closeDay,
   getHistory,
-  getSessionReport,
+  getHistorySession,
+  DEFAULT_COUNTERS,
+  DEFAULT_PRIORITY_BATCH_SIZE,
+  claimCounter,
+  releaseCounterBySocket,
 };

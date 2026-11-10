@@ -1,54 +1,49 @@
 /**
  * screens/AuthScreen.jsx
  *
- * Tela de autenticação — Design System v3.0
- * Suporte a login por email/senha, cadastro e magic link. Sem emojis.
+ * Tela de autenticação exclusiva com e-mail e senha:
+ *   login     → e-mail + senha
+ *   signup    → cadastro com nome, e-mail e senha
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { AlertCircle, Check, ArrowLeft, LogIn, UserPlus } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { ArrowLeft, AlertCircle, Check, Radio } from "lucide-react";
 
 const AuthScreen = ({ onBack }) => {
-  const {
-    signInWithEmail,
-    signUpWithEmail,
-    signInWithMagicLink,
-    authError,
-    setAuthError,
-  } = useAuth();
+  const { signInWithEmail, signUpWithEmail, authError, setAuthError, user } = useAuth();
 
-  const [mode, setMode] = useState("login"); // 'login' | 'signup' | 'magic'
+  const [mode, setMode] = useState("login"); // 'login' | 'signup'
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
 
-  const handleSubmit = async () => {
-    if (!email) return;
+  useEffect(() => {
+    if (user) onBack?.();
+  }, [user, onBack]);
+
+  const handleSubmit = async (e) => {
+    e?.preventDefault();
+    if (!email || !password) return;
     setLoading(true);
     setAuthError(null);
     setSuccess("");
 
     let ok = false;
-
     if (mode === "login") {
       ok = await signInWithEmail(email, password);
     } else if (mode === "signup") {
       ok = await signUpWithEmail(email, password, name);
-      if (ok) setSuccess("Conta criada com sucesso! Verifique seu e-mail para confirmar.");
-    } else if (mode === "magic") {
-      ok = await signInWithMagicLink(email);
-      if (ok) setSuccess("Link de acesso enviado! Verifique sua caixa de entrada.");
+      if (ok) setSuccess("Conta criada com sucesso! Faça login para continuar.");
     }
 
     setLoading(false);
   };
 
   const tabs = [
-    { key: "login", label: "Entrar" },
-    { key: "signup", label: "Criar Conta" },
-    { key: "magic", label: "Magic Link" },
+    { key: "login", label: "Entrar", Icon: LogIn },
+    { key: "signup", label: "Criar Conta", Icon: UserPlus },
   ];
 
   return (
@@ -64,13 +59,11 @@ const AuthScreen = ({ onBack }) => {
         overflow: "hidden",
       }}
     >
-      {/* Padrão de fundo suave */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          backgroundImage:
-            "radial-gradient(circle, var(--border) 1px, transparent 1px)",
+          backgroundImage: "radial-gradient(circle, var(--border) 1px, transparent 1px)",
           backgroundSize: "32px 32px",
           opacity: 0.25,
           pointerEvents: "none",
@@ -80,15 +73,14 @@ const AuthScreen = ({ onBack }) => {
         style={{
           position: "absolute",
           inset: 0,
-          background:
-            "radial-gradient(ellipse 70% 60% at 50% 50%, var(--primary-glow) 0%, transparent 70%)",
+          background: "radial-gradient(ellipse 70% 60% at 50% 50%, var(--primary-glow) 0%, transparent 70%)",
           pointerEvents: "none",
         }}
       />
 
       <div
         className="animate-fade"
-        style={{ width: "100%", maxWidth: "400px", position: "relative", zIndex: 1 }}
+        style={{ width: "100%", maxWidth: "420px", position: "relative", zIndex: 1 }}
       >
         {onBack && (
           <button
@@ -103,150 +95,132 @@ const AuthScreen = ({ onBack }) => {
               gap: "6px",
             }}
           >
-            <ArrowLeft size={13} /> Voltar
+            <ArrowLeft size={14} /> Voltar
           </button>
         )}
 
-        {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: "32px" }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "10px",
-              marginBottom: "8px",
-            }}
-          >
-            <div
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: "10px",
-                background: "var(--primary-muted)",
-                border: "1px solid var(--primary-border)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--primary)",
-              }}
-            >
-              <Radio size={20} />
-            </div>
+        <div className="card" style={{ padding: "32px" }}>
+          {/* Header */}
+          <div style={{ textAlign: "center", marginBottom: "28px" }}>
             <span
               style={{
                 fontSize: "26px",
                 fontWeight: 800,
-                fontFamily: "var(--font-display)",
                 letterSpacing: "-0.02em",
+                color: "var(--text)",
               }}
             >
-              fila<span style={{ color: "var(--primary)" }}>.io</span>
+              Kiwi<span style={{ color: "var(--primary)" }}>i</span>
             </span>
+            <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "4px" }}>
+              {mode === "login"
+                ? "Entre para gerenciar suas filas"
+                : "Cadastre-se para começar"}
+            </p>
           </div>
-          <p style={{ color: "var(--text-secondary)", fontSize: "13px", margin: 0 }}>
-            Plataforma de Gestão de Filas
-          </p>
-        </div>
 
-        <div
-          className="card"
-          style={{ padding: "28px", background: "var(--surface)" }}
-        >
-          {/* Tabs */}
+          {/* Abas */}
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              background: "var(--surface-alt)",
+              display: "flex",
+              background: "var(--surface-alt, var(--bg))",
               borderRadius: "8px",
               padding: "4px",
               marginBottom: "24px",
-              gap: "2px",
+              border: "1px solid var(--border)",
             }}
           >
-            {tabs.map((t) => (
+            {tabs.map((tab) => (
               <button
-                key={t.key}
+                key={tab.key}
                 onClick={() => {
-                  setMode(t.key);
+                  setMode(tab.key);
                   setAuthError(null);
                   setSuccess("");
                 }}
                 style={{
-                  padding: "8px",
+                  flex: 1,
+                  padding: "8px 12px",
                   borderRadius: "6px",
                   border: "none",
+                  background: mode === tab.key ? "var(--surface)" : "transparent",
+                  color: mode === tab.key ? "var(--text)" : "var(--text-secondary)",
+                  fontWeight: mode === tab.key ? 600 : 400,
+                  fontSize: "13px",
                   cursor: "pointer",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  fontFamily: "inherit",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  boxShadow: mode === tab.key ? "var(--shadow-sm)" : "none",
                   transition: "all 0.15s ease",
-                  background: mode === t.key ? "var(--surface)" : "transparent",
-                  color: mode === t.key ? "var(--text)" : "var(--text-secondary)",
-                  boxShadow:
-                    mode === t.key ? "0 1px 3px rgba(0,0,0,0.2)" : "none",
                 }}
               >
-                {t.label}
+                <tab.Icon size={14} />
+                {tab.label}
               </button>
             ))}
           </div>
 
-          {/* Campos */}
-          {mode === "signup" && (
-            <div style={{ marginBottom: "14px" }}>
+          {/* Formulário */}
+          <form onSubmit={handleSubmit}>
+            {mode === "signup" && (
+              <div style={{ marginBottom: "18px" }}>
+                <label
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
+                    display: "block",
+                    marginBottom: "6px",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Seu Nome
+                </label>
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Nome completo"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required={mode === "signup"}
+                  autoFocus
+                />
+              </div>
+            )}
+
+            <div style={{ marginBottom: "18px" }}>
               <label
                 style={{
-                  display: "block",
                   fontSize: "11px",
                   fontWeight: 600,
                   color: "var(--text-secondary)",
+                  display: "block",
                   marginBottom: "6px",
                   textTransform: "uppercase",
                 }}
               >
-                Nome Completo
+                E-mail
               </label>
               <input
                 className="input"
-                placeholder="Ex: Dra. Ana Paula"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoFocus={mode !== "signup"}
               />
             </div>
-          )}
 
-          <div style={{ marginBottom: "14px" }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: "11px",
-                fontWeight: 600,
-                color: "var(--text-secondary)",
-                marginBottom: "6px",
-                textTransform: "uppercase",
-              }}
-            >
-              E-mail
-            </label>
-            <input
-              className="input"
-              type="email"
-              placeholder="seu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            />
-          </div>
-
-          {mode !== "magic" && (
-            <div style={{ marginBottom: "18px" }}>
+            <div style={{ marginBottom: "24px" }}>
               <label
                 style={{
-                  display: "block",
                   fontSize: "11px",
                   fontWeight: 600,
                   color: "var(--text-secondary)",
+                  display: "block",
                   marginBottom: "6px",
                   textTransform: "uppercase",
                 }}
@@ -256,83 +230,64 @@ const AuthScreen = ({ onBack }) => {
               <input
                 className="input"
                 type="password"
-                placeholder="••••••••"
+                placeholder="Mínimo 6 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                required
+                minLength={6}
               />
             </div>
-          )}
 
-          {/* Feedback */}
-          {authError && (
-            <div
-              style={{
-                background: "var(--danger-muted)",
-                border: "1px solid var(--danger-border)",
-                borderRadius: "8px",
-                padding: "10px 14px",
-                color: "var(--danger)",
-                fontSize: "13px",
-                marginBottom: "16px",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <AlertCircle size={15} />
-              <span>{authError}</span>
-            </div>
-          )}
-          {success && (
-            <div
-              style={{
-                background: "var(--success-muted)",
-                border: "1px solid var(--success-border)",
-                borderRadius: "8px",
-                padding: "10px 14px",
-                color: "var(--success)",
-                fontSize: "13px",
-                marginBottom: "16px",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <Check size={15} />
-              <span>{success}</span>
-            </div>
-          )}
+            {/* Erros e Sucesso */}
+            {authError && (
+              <div
+                style={{
+                  background: "var(--danger-muted)",
+                  border: "1px solid var(--danger-border)",
+                  borderRadius: "8px",
+                  padding: "10px 14px",
+                  color: "var(--danger)",
+                  fontSize: "13px",
+                  marginBottom: "16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>{authError}</span>
+              </div>
+            )}
 
-          {/* Botão principal */}
-          <button
-            className="btn btn-primary"
-            onClick={handleSubmit}
-            disabled={loading || !email}
-            style={{ width: "100%", padding: "12px", fontSize: "14px", fontWeight: 700 }}
-          >
-            {loading
-              ? "Processando..."
-              : mode === "login"
-              ? "Entrar no Sistema"
-              : mode === "signup"
-              ? "Concluir Cadastro"
-              : "Enviar Link de Acesso"}
-          </button>
+            {success && (
+              <div
+                style={{
+                  background: "var(--success-muted)",
+                  border: "1px solid var(--success-border)",
+                  borderRadius: "8px",
+                  padding: "10px 14px",
+                  color: "var(--success)",
+                  fontSize: "13px",
+                  marginBottom: "16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <Check size={15} style={{ flexShrink: 0 }} />
+                <span>{success}</span>
+              </div>
+            )}
 
-          {mode === "magic" && (
-            <p
-              style={{
-                textAlign: "center",
-                fontSize: "12px",
-                color: "var(--text-dim)",
-                marginTop: "14px",
-                lineHeight: 1.4,
-              }}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading || !email || !password}
+              style={{ width: "100%", padding: "12px", fontSize: "14px", fontWeight: 700 }}
             >
-              Um link direto de login será enviado para sua caixa de entrada.
-            </p>
-          )}
+              {loading ? "Aguarde..." : mode === "login" ? "Entrar no Sistema" : "Criar Minha Conta"}
+            </button>
+          </form>
         </div>
       </div>
     </div>

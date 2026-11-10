@@ -1,22 +1,21 @@
 /**
  * screens/ClientCheckinScreen.jsx
  *
- * Design System v3.0 — Check-in de Paciente/Cliente
- * Entrada na fila com validação de sala e geração de senha.
+ * Kiwii Design System v3.0 — Check-in de Paciente/Cliente
+ * Entrada na fila com suporte a QR Code, código direto, campos customizados e fila trancada.
  */
 import { useState, useRef, useEffect } from "react";
-import { fetchRoomPublic, joinQueue } from "../lib/api";
 import {
   ArrowLeft,
-  ArrowRight,
-  QrCode,
   Camera,
-  Check,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
   Ticket,
-  AlertCircle,
-  Clock,
-  Radio,
+  Lock,
 } from "lucide-react";
+import CustomFieldInput, { validateCustomFields } from "../components/CustomFieldInput";
+import { apiFetch } from "../lib/api";
 
 const ClientCheckinScreen = ({ initialCode, onJoined, onBack }) => {
   const [step, setStep] = useState(1);
@@ -24,6 +23,7 @@ const ClientCheckinScreen = ({ initialCode, onJoined, onBack }) => {
   const [room, setRoom] = useState(null);
   const [name, setName] = useState("");
   const [selectedCat, setSelectedCat] = useState("");
+  const [customValues, setCustomValues] = useState({});
   const [error, setError] = useState("");
   const [scanning, setScanning] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -31,12 +31,12 @@ const ClientCheckinScreen = ({ initialCode, onJoined, onBack }) => {
   const qrRef = useRef(null);
   const scannerRef = useRef(null);
 
-  // Auto-validar sala se initialCode foi providenciado
+  // Auto-validar sala se initialCode foi fornecido (ex: via rota /join/:code)
   useEffect(() => {
     if (initialCode && initialCode.length === 6) {
       validateRoom(initialCode);
     }
-  }, []);
+  }, [initialCode]);
 
   // ── QR Scanner ────────────────────────────────────────────────
   const startScanner = async () => {
@@ -78,9 +78,10 @@ const ClientCheckinScreen = ({ initialCode, onJoined, onBack }) => {
     setError("");
     setValidating(true);
     try {
-      const data = await fetchRoomPublic(codeToUse.toUpperCase());
+      const data = await apiFetch(`/api/rooms/${codeToUse.toUpperCase()}`);
       setRoom(data);
-      setSelectedCat(data.categories[0]?.name || "");
+      setSelectedCat(data.categories?.[0]?.name || "");
+      setCustomValues({});
       setStep(2);
     } catch (err) {
       setError(err.message);
@@ -91,21 +92,42 @@ const ClientCheckinScreen = ({ initialCode, onJoined, onBack }) => {
 
   // ── Entrar na fila ────────────────────────────────────────────
   const handleJoin = async () => {
-    if (!name.trim()) {
-      setError("Informe seu nome completo.");
+    if (room?.locked) {
+      setError("Esta fila está trancada e não está aceitando novos clientes.");
       return;
     }
+    if (!name.trim()) {
+      setError("Informe seu nome.");
+      return;
+    }
+
+    const fieldErr = validateCustomFields(room.customFields, customValues);
+    if (fieldErr) {
+      setError(fieldErr);
+      return;
+    }
+
     setError("");
     setJoining(true);
     try {
-      const data = await joinQueue(code.toUpperCase(), name.trim(), selectedCat);
+      const data = await apiFetch("/api/queue/join", {
+        method: "POST",
+        body: JSON.stringify({
+          roomCode: code.toUpperCase(),
+          name: name.trim(),
+          category: selectedCat,
+          customData: customValues,
+        }),
+      });
+
       sessionStorage.setItem("session_token", data.sessionToken);
       try {
         localStorage.setItem(
-          "fila_io_active_ticket",
+          "kiwii_active_ticket",
           JSON.stringify({ ticket: data.ticket, room })
         );
       } catch {}
+
       onJoined(data.ticket, room);
     } catch (err) {
       setError(err.message);
@@ -128,42 +150,28 @@ const ClientCheckinScreen = ({ initialCode, onJoined, onBack }) => {
     >
       <div className="animate-fade">
         {/* Header */}
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: "32px",
-            position: "relative",
-          }}
-        >
+        <div style={{ textAlign: "center", marginBottom: "36px", position: "relative" }}>
           <button
-            className="btn btn-secondary"
+            className="btn"
             onClick={onBack}
             style={{
               position: "absolute",
               left: 0,
               top: "50%",
               transform: "translateY(-50%)",
-              fontSize: "12px",
-              padding: "6px 10px",
-              gap: "5px",
+              padding: "7px 14px",
+              fontSize: "13px",
             }}
           >
-            <ArrowLeft size={13} /> Voltar
+            <ArrowLeft size={14} /> Voltar
           </button>
-          <div
-            style={{
-              fontSize: "24px",
-              fontWeight: 800,
-              marginBottom: "4px",
-              fontFamily: "var(--font-display)",
-            }}
-          >
-            fila<span style={{ color: "var(--primary)" }}>.io</span>
+          <div className="display" style={{ fontSize: "24px", fontWeight: 800, marginBottom: "6px" }}>
+            Kiwi<span style={{ color: "var(--accent)" }}>i</span>
           </div>
-          <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
             {step === 1
-              ? "Escaneie o QR Code ou digite o código da sala"
-              : "Informe seus dados para retirar a senha"}
+              ? "Escaneie o QR ou digite o código da sala"
+              : "Quase lá — preencha seus dados"}
           </p>
         </div>
 
@@ -175,148 +183,100 @@ const ClientCheckinScreen = ({ initialCode, onJoined, onBack }) => {
                 <div
                   id="qr-reader"
                   ref={qrRef}
-                  style={{
-                    borderRadius: "12px",
-                    overflow: "hidden",
-                    border: "2px solid var(--primary)",
-                  }}
+                  style={{ borderRadius: "12px", overflow: "hidden", border: "2px solid var(--accent)" }}
                 />
                 <button
-                  className="btn btn-danger"
+                  className="btn"
                   onClick={stopScanner}
-                  style={{ marginTop: "12px", width: "100%", padding: "12px" }}
+                  style={{
+                    marginTop: "12px",
+                    width: "100%",
+                    padding: "12px",
+                    color: "var(--danger)",
+                    borderColor: "var(--danger-glow)",
+                  }}
                 >
                   Cancelar Leitura
                 </button>
               </div>
             ) : (
               <button
-                className="card"
+                className="btn card"
                 onClick={startScanner}
                 style={{
                   width: "100%",
-                  padding: "24px",
+                  padding: "22px",
                   marginBottom: "20px",
                   border: "1px dashed var(--border)",
                   textAlign: "center",
-                  cursor: "pointer",
-                  background: "var(--surface-alt)",
-                  transition: "all 0.2s var(--ease-out)",
-                  display: "flex",
                   flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  gap: "8px",
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--primary)";
-                  e.currentTarget.style.background = "var(--primary-muted)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)";
-                  e.currentTarget.style.background = "var(--surface-alt)";
-                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
               >
-                <div
-                  style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: "12px",
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "var(--primary)",
-                    marginBottom: "10px",
-                  }}
-                >
-                  <Camera size={24} />
-                </div>
-                <div style={{ fontWeight: 600, fontSize: "15px", color: "var(--text)" }}>
-                  Escanear QR Code
-                </div>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--text-secondary)",
-                    marginTop: "4px",
-                  }}
-                >
-                  Aponte a câmera para a tela do host
+                <Camera size={30} color="var(--text-muted)" />
+                <div style={{ fontWeight: 600 }}>Escanear QR Code</div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  Aponte a câmera para o QR Code da sala
                 </div>
               </button>
             )}
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                marginBottom: "20px",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
               <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-              <span
-                className="mono"
-                style={{ color: "var(--text-dim)", fontSize: "11px" }}
-              >
+              <span className="mono" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
                 OU
               </span>
               <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
             </div>
 
-            <label
-              style={{
-                display: "block",
-                fontSize: "11px",
-                fontWeight: 600,
-                color: "var(--text-secondary)",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: "8px",
-              }}
-            >
-              Código da Sala (6 caracteres)
-            </label>
-            <input
-              className="input mono"
-              placeholder="ABC123"
-              maxLength={6}
-              value={code}
-              onChange={(e) => {
-                setCode(e.target.value.toUpperCase());
-                setError("");
-              }}
-              onKeyDown={(e) =>
-                e.key === "Enter" && code.length === 6 && validateRoom()
-              }
-              style={{
-                fontSize: "26px",
-                fontWeight: 700,
-                letterSpacing: "0.25em",
-                textAlign: "center",
-                marginBottom: "16px",
-              }}
-            />
+            <div style={{ marginBottom: "16px" }}>
+              <label
+                className="mono"
+                style={{
+                  display: "block",
+                  fontSize: "11px",
+                  color: "var(--text-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: "8px",
+                }}
+              >
+                Código da Sala (6 dígitos)
+              </label>
+              <input
+                className="input mono"
+                placeholder="ABC123"
+                maxLength={6}
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value.toUpperCase());
+                  setError("");
+                }}
+                onKeyDown={(e) => e.key === "Enter" && code.length === 6 && validateRoom()}
+                style={{
+                  fontSize: "28px",
+                  letterSpacing: "0.25em",
+                  textAlign: "center",
+                  textTransform: "uppercase",
+                }}
+              />
+            </div>
 
             {error && (
               <div
                 style={{
-                  background: "var(--danger-muted)",
-                  border: "1px solid var(--danger-border)",
-                  borderRadius: "8px",
-                  padding: "10px 14px",
-                  color: "var(--danger)",
-                  fontSize: "13px",
-                  marginBottom: "16px",
                   display: "flex",
                   alignItems: "center",
-                  gap: "8px",
                   justifyContent: "center",
+                  gap: "6px",
+                  color: "var(--danger)",
+                  fontSize: "13px",
+                  marginBottom: "12px",
                 }}
               >
-                <AlertCircle size={15} />
-                <span>{error}</span>
+                <AlertTriangle size={14} /> {error}
               </div>
             )}
 
@@ -324,268 +284,247 @@ const ClientCheckinScreen = ({ initialCode, onJoined, onBack }) => {
               className="btn btn-primary"
               onClick={() => validateRoom()}
               disabled={code.length < 6 || validating}
-              style={{ width: "100%", padding: "14px", fontSize: "14px", gap: "8px" }}
+              style={{ width: "100%", padding: "15px", fontSize: "15px" }}
             >
               {validating ? (
-                "Validando sala..."
-              ) : (
                 <>
-                  Validar Código <ArrowRight size={16} />
+                  <Loader2 size={16} className="spin" /> Verificando...
                 </>
+              ) : (
+                "Validar Sala"
               )}
             </button>
           </>
         )}
 
-        {/* ── STEP 2: Nome + Categoria ── */}
+        {/* ── STEP 2: Nome + campos personalizados + categoria ── */}
         {step === 2 && room && (
           <div className="animate-fade">
-            {/* Sala confirmada */}
             <div
               className="card"
               style={{
-                padding: "14px 18px",
+                padding: "18px",
                 marginBottom: "20px",
-                borderColor: "var(--primary-border)",
-                background: "var(--primary-muted)",
+                borderColor: "var(--accent-dim)",
+                background: "var(--accent-light)",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <div
                   style={{
-                    width: 36,
-                    height: 36,
-                    background: "var(--primary)",
-                    borderRadius: "8px",
+                    width: 40,
+                    height: 40,
+                    background: "var(--accent)",
+                    borderRadius: "10px",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    color: "#0c0f14",
                     flexShrink: 0,
                   }}
                 >
-                  <Check size={18} strokeWidth={3} />
+                  <CheckCircle2 size={20} color="#04141C" />
                 </div>
                 <div>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      color: "var(--text)",
-                      fontSize: "15px",
-                    }}
-                  >
+                  <div style={{ fontWeight: 700, color: "var(--accent)", fontSize: "15px" }}>
                     {room.name}
                   </div>
                   <div
                     className="mono"
-                    style={{
-                      fontSize: "12px",
-                      color: "var(--primary)",
-                      fontWeight: 600,
-                    }}
+                    style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}
                   >
-                    Código: {room.code}
+                    {room.code} · {room.queueLength || 0} na fila agora
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Nome */}
-            <label
-              style={{
-                display: "block",
-                fontSize: "11px",
-                fontWeight: 600,
-                color: "var(--text-secondary)",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: "8px",
-              }}
-            >
-              Seu Nome Completo
-            </label>
-            <input
-              className="input"
-              placeholder="Ex: Carlos Alberto da Silva"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setError("");
-              }}
-              autoFocus
-              style={{ marginBottom: "20px" }}
-            />
+            {/* Aviso de fila trancada (Alta 8) */}
+            {room.locked && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  background: "rgba(245, 158, 11, 0.12)",
+                  border: "1px solid var(--warn)",
+                  borderRadius: "8px",
+                  padding: "14px",
+                  color: "var(--warn)",
+                  fontSize: "13px",
+                  marginBottom: "20px",
+                }}
+              >
+                <Lock size={18} style={{ flexShrink: 0 }} />
+                <div>
+                  <strong>Fila trancada:</strong> Esta sala encerrou a entrada de novas senhas no momento.
+                </div>
+              </div>
+            )}
 
-            {/* Categorias */}
-            <label
-              style={{
-                display: "block",
-                fontSize: "11px",
-                fontWeight: 600,
-                color: "var(--text-secondary)",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: "10px",
-              }}
-            >
-              Tipo de Atendimento
-            </label>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-                marginBottom: "24px",
-              }}
-            >
-              {room.categories.map((cat) => {
-                const selected = selectedCat === cat.name;
-                const pColor =
-                  cat.priority === 3
-                    ? "var(--priority-high)"
-                    : cat.priority === 2
-                    ? "var(--priority-med)"
-                    : "var(--priority-low)";
-                const pBg =
-                  cat.priority === 3
-                    ? "var(--priority-high-bg)"
-                    : cat.priority === 2
-                    ? "var(--priority-med-bg)"
-                    : "var(--priority-low-bg)";
-                const pLabel =
-                  cat.priority === 3 ? "Alta" : cat.priority === 2 ? "Média" : "Baixa";
+            <div style={{ marginBottom: "18px" }}>
+              <label
+                className="mono"
+                style={{
+                  fontSize: "11px",
+                  color: "var(--text-muted)",
+                  display: "block",
+                  marginBottom: "8px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                Seu Nome
+              </label>
+              <input
+                className="input"
+                placeholder="Nome completo"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setError("");
+                }}
+                disabled={room.locked}
+                autoFocus
+              />
+            </div>
 
-                return (
-                  <button
-                    key={cat.name}
-                    onClick={() => setSelectedCat(cat.name)}
-                    style={{
-                      padding: "12px 16px",
-                      textAlign: "left",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "12px",
-                      border: `1px solid ${
-                        selected ? "var(--primary)" : "var(--border)"
-                      }`,
-                      background: selected
-                        ? "var(--primary-muted)"
-                        : "var(--surface)",
-                      borderRadius: "10px",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    <div
+            {/* Campos personalizados (Média 5) */}
+            {room.customFields?.length > 0 && (
+              <div style={{ marginBottom: "18px" }}>
+                <label
+                  className="mono"
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                    display: "block",
+                    marginBottom: "10px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  Informações Adicionais
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                  {room.customFields.map((field) => (
+                    <CustomFieldInput
+                      key={field.id}
+                      field={field}
+                      value={customValues[field.id]}
+                      onChange={(v) => {
+                        setCustomValues({ ...customValues, [field.id]: v });
+                        setError("");
+                      }}
+                      disabled={room.locked}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginBottom: "24px" }}>
+              <label
+                className="mono"
+                style={{
+                  fontSize: "11px",
+                  color: "var(--text-muted)",
+                  display: "block",
+                  marginBottom: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                Tipo de Atendimento
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {room.categories?.map((cat) => {
+                  const selected = selectedCat === cat.name;
+                  return (
+                    <button
+                      key={cat.name}
+                      type="button"
+                      className="btn card"
+                      onClick={() => !room.locked && setSelectedCat(cat.name)}
+                      disabled={room.locked}
                       style={{
-                        width: 14,
-                        height: 14,
-                        borderRadius: "50%",
-                        border: `2px solid ${
-                          selected ? "var(--primary)" : "var(--border-active)"
-                        }`,
+                        padding: "14px 16px",
+                        textAlign: "left",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
+                        gap: "12px",
+                        border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
+                        background: selected ? "var(--accent-light)" : "var(--surface)",
+                        opacity: room.locked ? 0.6 : 1,
+                        cursor: room.locked ? "not-allowed" : "pointer",
                       }}
                     >
-                      {selected && (
-                        <div
-                          style={{
-                            width: 6,
-                            height: 6,
-                            borderRadius: "50%",
-                            background: "var(--primary)",
-                          }}
-                        />
-                      )}
-                    </div>
-                    <span
-                      style={{
-                        flex: 1,
-                        fontWeight: 600,
-                        color: selected ? "var(--text)" : "var(--text-secondary)",
-                        fontSize: "14px",
-                      }}
-                    >
-                      {cat.name}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        color: "var(--text-dim)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      <Clock size={12} /> ~{cat.tma} min
-                    </span>
-                    <span
-                      style={{
-                        background: pBg,
-                        color: pColor,
-                        padding: "2px 8px",
-                        borderRadius: "6px",
-                        fontSize: "11px",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {pLabel}
-                    </span>
-                  </button>
-                );
-              })}
+                      <div
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          background: selected ? "var(--accent)" : "var(--border)",
+                          flexShrink: 0,
+                          transition: "background 0.2s",
+                        }}
+                      />
+                      <span
+                        style={{
+                          flex: 1,
+                          fontWeight: 600,
+                          color: selected ? "var(--accent)" : "var(--text)",
+                          fontSize: "14px",
+                        }}
+                      >
+                        {cat.name}
+                      </span>
+                      <span className="mono" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                        ~{cat.tma}min
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {error && (
               <div
                 style={{
-                  background: "var(--danger-muted)",
-                  border: "1px solid var(--danger-border)",
-                  borderRadius: "8px",
-                  padding: "10px 14px",
-                  color: "var(--danger)",
-                  fontSize: "13px",
-                  marginBottom: "16px",
                   display: "flex",
                   alignItems: "center",
-                  gap: "8px",
                   justifyContent: "center",
+                  gap: "6px",
+                  color: "var(--danger)",
+                  fontSize: "13px",
+                  marginBottom: "12px",
                 }}
               >
-                <AlertCircle size={15} />
-                <span>{error}</span>
+                <AlertTriangle size={14} /> {error}
               </div>
             )}
 
             <div style={{ display: "flex", gap: "10px" }}>
               <button
-                className="btn btn-secondary"
+                className="btn"
                 onClick={() => {
                   setStep(1);
                   setError("");
                 }}
-                style={{ padding: "14px 18px", fontSize: "14px" }}
+                style={{ padding: "15px", flexShrink: 0 }}
               >
                 <ArrowLeft size={16} />
               </button>
               <button
                 className="btn btn-primary"
                 onClick={handleJoin}
-                disabled={joining}
-                style={{
-                  flex: 1,
-                  padding: "14px",
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  gap: "8px",
-                }}
+                disabled={joining || room.locked}
+                style={{ flex: 1, padding: "15px", fontSize: "15px" }}
               >
                 {joining ? (
-                  "Entrando na fila..."
+                  <>
+                    <Loader2 size={16} className="spin" /> Entrando na fila...
+                  </>
+                ) : room.locked ? (
+                  "Fila Trancada"
                 ) : (
                   <>
                     <Ticket size={17} /> Pegar Minha Senha

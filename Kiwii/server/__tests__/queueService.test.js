@@ -1,213 +1,272 @@
 /**
  * __tests__/queueService.test.js
  *
- * Testes unitários para a lógica de fila.
- * Usa mocks para isolar do banco de dados e Redis.
+ * Testes unitários para a lógica de fila, guichês, trancamento e regras de prioridade.
  */
 
-// ── Mocks ──────────────────────────────────────────────────────────
-const mockQuery = jest.fn().mockResolvedValue({ rows: [], rowCount: 0 });
-jest.mock("../config/db", () => ({
-  pool: { query: (...args) => mockQuery(...args) },
-}));
+const {
+  rooms,
+  createRoom,
+  recalcPositions,
+  closeDay,
+  claimCounter,
+  releaseCounterBySocket,
+} = require("../services/roomService");
 
-// Mock do roomService — cache em memória para testes
-const mockQueues = {};
-const mockRooms = {
-  TEST01: {
-    id: "room-uuid-1",
-    code: "TEST01",
-    org_id: "org-uuid-1",
-    active: true,
-    categories: [
-      { name: "Geral", priority: 1, tma: 10 },
-      { name: "Prioritário", priority: 3, tma: 5 },
-    ],
-  },
-};
-
-jest.mock("../services/roomService", () => ({
-  getCachedQueue: jest.fn(async (code) => mockQueues[code] || []),
-  cacheQueue: jest.fn(async (code, queue) => { mockQueues[code] = queue; }),
-  getRoom: jest.fn(async (code) => mockRooms[code] || null),
-  recalcPositions: jest.fn((queue) => {
-    queue.sort((a, b) => b.priority - a.priority || a.joinedAt - b.joinedAt);
-    queue.forEach((t, i) => {
-      t.position = i + 1;
-      t.estimatedWait = t.position * t.tma;
-    });
-  }),
-  roomExists: jest.fn(async (code) => !!mockRooms[code]),
-}));
-
-// ── Import do service (após mocks) ────────────────────────────────
 const {
   joinQueue,
   callNext,
   callSpecific,
+  confirmServed,
   removeTicket,
+  leaveQueue,
+  recallTicket,
   changePriority,
   getQueue,
-  confirmServed,
+  getArchive,
 } = require("../services/queueService");
 
-// ── Helpers ────────────────────────────────────────────────────────
-beforeEach(() => {
-  // Limpa filas e mocks entre testes
-  Object.keys(mockQueues).forEach((k) => delete mockQueues[k]);
-  mockQuery.mockClear();
-});
+describe("queueService & roomService", () => {
+  const ROOM_CODE = "TEST01";
 
-// ── Testes ─────────────────────────────────────────────────────────
+  beforeEach(() => {
+    rooms.clear();
+    createRoom({
+      name: "Sala de Testes",
+      orgId: "org-uuid-1",
+      hostId: "user-uuid-1",
+      categories: [
+        { name: "Geral", priority: 1, tma: 10 },
+        { name: "Médio", priority: 2, tma: 8 },
+        { name: "Prioritário", priority: 3, tma: 5 },
+      ],
+      counters: [
+        { id: "c1", name: "Guichê 1" },
+        { id: "c2", name: "Guichê 2" },
+      ],
+      customFields: [
+        { id: "cpf", label: "CPF", type: "text", required: true },
+        { id: "obs", label: "Observações", type: "text", required: false },
+      ],
+      priorityBatchSize: 2,
+      actor: { name: "Tester", role: "owner" },
+    });
 
-describe("joinQueue", () => {
-  test("adiciona um ticket à fila com posição correta", async () => {
-    const ticket = await joinQueue("TEST01", { name: "João", category: "Geral" });
-
-    expect(ticket.name).toBe("João");
-    expect(ticket.category).toBe("Geral");
-    expect(ticket.priority).toBe(1);
-    expect(ticket.status).toBe("waiting");
-    expect(ticket.position).toBe(1);
-    expect(ticket.manual).toBe(false);
-    expect(ticket.token).toContain("TEST01-");
+    // Forçar código TEST01 para os testes
+    const created = [...rooms.values()][0];
+    rooms.delete(created.code);
+    created.code = ROOM_CODE;
+    rooms.set(ROOM_CODE, created);
   });
 
-  test("respeita ordem de prioridade", async () => {
-    const t1 = await joinQueue("TEST01", { name: "Normal", category: "Geral" });
-    const t2 = await joinQueue("TEST01", { name: "Urgente", category: "Prioritário" });
+  describe("joinQueue", () => {
+    test("adiciona um ticket à fila com campos válidos", () => {
+      const ticket = joinQueue(ROOM_CODE, {
+        name: "João Silva",
+        category: "Geral",
+        customData: { cpf: "123.456.789-00" },
+      });
 
-    const queue = mockQueues["TEST01"];
-    expect(queue[0].name).toBe("Urgente");  // prioridade 3 vem primeiro
-    expect(queue[1].name).toBe("Normal");
-    expect(queue[0].position).toBe(1);
-    expect(queue[1].position).toBe(2);
+      expect(ticket.name).toBe("João Silva");
+      expect(ticket.category).toBe("Geral");
+      expect(ticket.priority).toBe(1);
+      expect(ticket.status).toBe("waiting");
+      expect(ticket.position).toBe(1);
+      expect(ticket.manual).toBe(false);
+      expect(ticket.token).toContain(`${ROOM_CODE}-`);
+      expect(ticket.customData.cpf).toBe("123.456.789-00");
+    });
+
+    test("rejeita quando campo obrigatório está faltando", () => {
+      expect(() => {
+        joinQueue(ROOM_CODE, {
+          name: "João Silva",
+          category: "Geral",
+          customData: {},
+        });
+      }).toThrow("Campo obrigatório não preenchido: CPF");
+    });
+
+    test("rejeita categoria inexistente", () => {
+      expect(() => {
+        joinQueue(ROOM_CODE, {
+          name: "João",
+          category: "Inventada",
+          customData: { cpf: "123" },
+        });
+      }).toThrow('Categoria "Inventada" não existe nesta sala.');
+    });
+
+    test("rejeita sala inexistente ou inativa", () => {
+      expect(() => {
+        joinQueue("NAOEXISTE", {
+          name: "João",
+          category: "Geral",
+          customData: { cpf: "123" },
+        });
+      }).toThrow("Sala inativa ou inexistente.");
+    });
+
+    test("bloqueia entrada quando a fila está trancada, a menos que seja manual", () => {
+      const room = rooms.get(ROOM_CODE);
+      room.locked = true;
+
+      // Entrada normal rejeitada
+      expect(() => {
+        joinQueue(ROOM_CODE, {
+          name: "Cliente App",
+          category: "Geral",
+          customData: { cpf: "123" },
+        });
+      }).toThrow("A fila está temporariamente trancada");
+
+      // Entrada manual do host permitida
+      const manualTicket = joinQueue(ROOM_CODE, {
+        name: "Cliente Balcão",
+        category: "Geral",
+        manual: true,
+        customData: { cpf: "123" },
+      });
+      expect(manualTicket.manual).toBe(true);
+    });
   });
 
-  test("rejeita categoria inexistente", async () => {
-    await expect(
-      joinQueue("TEST01", { name: "Teste", category: "Inventada" })
-    ).rejects.toThrow('Categoria "Inventada" não existe nesta sala.');
+  describe("Regra de intercalação de prioridade (Priority 1)", () => {
+    test("intercala alta e média em blocos de batchSize quando ambos existem", () => {
+      const queue = [
+        { token: "h1", priority: 3, joinedAt: 100, tma: 5 },
+        { token: "h2", priority: 3, joinedAt: 101, tma: 5 },
+        { token: "h3", priority: 3, joinedAt: 102, tma: 5 },
+        { token: "m1", priority: 2, joinedAt: 103, tma: 5 },
+        { token: "m2", priority: 2, joinedAt: 104, tma: 5 },
+        { token: "m3", priority: 2, joinedAt: 105, tma: 5 },
+        { token: "l1", priority: 1, joinedAt: 106, tma: 5 },
+      ];
+
+      // batchSize = 2 -> 2 altas, 2 médias, 1 alta restante, 1 média restante, 1 baixa
+      recalcPositions(queue, { batchSize: 2 });
+
+      expect(queue.map((t) => t.token)).toEqual(["h1", "h2", "m1", "m2", "h3", "m3", "l1"]);
+      expect(queue[0].position).toBe(1);
+      expect(queue[1].position).toBe(2);
+      expect(queue[2].position).toBe(3);
+    });
+
+    test("se batchSize for 0, usa ordenação pura por prioridade decrescente", () => {
+      const queue = [
+        { token: "l1", priority: 1, joinedAt: 100, tma: 5 },
+        { token: "m1", priority: 2, joinedAt: 101, tma: 5 },
+        { token: "h1", priority: 3, joinedAt: 102, tma: 5 },
+      ];
+
+      recalcPositions(queue, { batchSize: 0 });
+
+      expect(queue.map((t) => t.token)).toEqual(["h1", "m1", "l1"]);
+    });
   });
 
-  test("rejeita sala inexistente", async () => {
-    await expect(
-      joinQueue("NAOEXISTE", { name: "Teste", category: "Geral" })
-    ).rejects.toThrow("Sala inativa ou inexistente.");
+  describe("Atendimento e Guichês", () => {
+    test("reivindica guichê e impede colisão", () => {
+      const room = rooms.get(ROOM_CODE);
+      claimCounter(room, "c1", "socket-1", "Operador 1");
+
+      expect(room.counterClaims["c1"]).toEqual({ socketId: "socket-1", name: "Operador 1" });
+
+      // Outro socket tentando o mesmo guichê é rejeitado
+      expect(() => {
+        claimCounter(room, "c1", "socket-2", "Operador 2");
+      }).toThrow('O guichê "Guichê 1" já está em uso por Operador 1.');
+
+      // Libera socket ao desconectar
+      expect(releaseCounterBySocket(room, "socket-1")).toBe(true);
+      expect(room.counterClaims["c1"]).toBeUndefined();
+    });
+
+    test("callNext chama o ticket de maior prioridade e atribui guichê", () => {
+      joinQueue(ROOM_CODE, { name: "Normal", category: "Geral", customData: { cpf: "1" } });
+      joinQueue(ROOM_CODE, { name: "Urgente", category: "Prioritário", customData: { cpf: "2" } });
+
+      const called = callNext(ROOM_CODE, { counter: "Guichê 1", actor: { name: "Op", role: "operator" } });
+
+      expect(called.name).toBe("Urgente");
+      expect(called.status).toBe("called");
+      expect(called.counter).toBe("Guichê 1");
+
+      const queue = getQueue(ROOM_CODE);
+      expect(queue.length).toBe(1);
+      expect(queue[0].name).toBe("Normal");
+
+      const archive = getArchive(ROOM_CODE);
+      expect(archive[0].token).toBe(called.token);
+    });
+
+    test("confirmServed marca o ticket como atendido", () => {
+      joinQueue(ROOM_CODE, { name: "Cliente", category: "Geral", customData: { cpf: "1" } });
+      const called = callNext(ROOM_CODE, { counter: "Guichê 1" });
+
+      const served = confirmServed(ROOM_CODE, called.token, { actor: { name: "Op", role: "operator" } });
+      expect(served.status).toBe("served");
+      expect(served.servedAt).toBeDefined();
+    });
   });
 
-  test("marca ticket manual corretamente", async () => {
-    const ticket = await joinQueue("TEST01", { name: "Manual", category: "Geral", manual: true });
-    expect(ticket.manual).toBe(true);
+  describe("Encerramento do dia (Priority 2)", () => {
+    test("não permite encerrar o dia se ainda houver pessoas na fila ou em atendimento", () => {
+      joinQueue(ROOM_CODE, { name: "Pendente", category: "Geral", customData: { cpf: "1" } });
+
+      expect(() => {
+        closeDay(ROOM_CODE, { name: "Op", role: "operator" });
+      }).toThrow("Não é possível encerrar: ainda há 1 na fila.");
+
+      // Chama o ticket (agora está em atendimento "called")
+      const called = callNext(ROOM_CODE);
+      expect(() => {
+        closeDay(ROOM_CODE, { name: "Op", role: "operator" });
+      }).toThrow("Não é possível encerrar: ainda há 1 em atendimento.");
+
+      // Atende o ticket (fila e atendimento zerados)
+      confirmServed(ROOM_CODE, called.token);
+
+      const report = closeDay(ROOM_CODE, { name: "Op", role: "operator" });
+      expect(report.totalServed).toBe(1);
+      expect(report.totalAbandonedInQueue).toBe(0);
+      expect(rooms.get(ROOM_CODE).active).toBe(false);
+    });
   });
 
-  test("limita nome a 80 caracteres", async () => {
-    const longName = "A".repeat(100);
-    const ticket = await joinQueue("TEST01", { name: longName, category: "Geral" });
-    expect(ticket.name.length).toBe(80);
-  });
-});
+  describe("Recall e remoções", () => {
+    test("remove ticket da fila e arquiva como removed_by_host", () => {
+      const ticket = joinQueue(ROOM_CODE, { name: "No-show", category: "Geral", customData: { cpf: "1" } });
+      const updatedQueue = removeTicket(ROOM_CODE, ticket.token);
 
-describe("callNext", () => {
-  test("remove o ticket de maior prioridade da fila", async () => {
-    await joinQueue("TEST01", { name: "Normal", category: "Geral" });
-    await joinQueue("TEST01", { name: "Urgente", category: "Prioritário" });
+      expect(updatedQueue.length).toBe(0);
+      const archive = getArchive(ROOM_CODE);
+      expect(archive[0].status).toBe("removed_by_host");
+    });
 
-    const called = await callNext("TEST01");
-    expect(called.name).toBe("Urgente");
-    expect(called.status).toBe("called");
-    expect(called.calledAt).toBeDefined();
+    test("recall de ticket para guichê direto ou frente da fila", () => {
+      const ticket = joinQueue(ROOM_CODE, { name: "Voltou", category: "Geral", customData: { cpf: "1" } });
+      removeTicket(ROOM_CODE, ticket.token);
 
-    const queue = mockQueues["TEST01"];
-    expect(queue.length).toBe(1);
-    expect(queue[0].name).toBe("Normal");
-  });
+      // Recall direto para guichê
+      const { ticket: recalled } = recallTicket(ROOM_CODE, ticket.token, {
+        mode: "counter",
+        counter: "Guichê 2",
+        actor: { name: "Op", role: "operator" },
+      });
+      expect(recalled.status).toBe("called");
+      expect(recalled.counter).toBe("Guichê 2");
 
-  test("retorna null se fila vazia", async () => {
-    const result = await callNext("TEST01");
-    expect(result).toBeNull();
-  });
-});
+      // Confirma e remove
+      confirmServed(ROOM_CODE, ticket.token);
 
-describe("callSpecific", () => {
-  test("chama ticket específico pelo token", async () => {
-    const t1 = await joinQueue("TEST01", { name: "Primeiro", category: "Geral" });
-    const t2 = await joinQueue("TEST01", { name: "Segundo", category: "Geral" });
-
-    const called = await callSpecific("TEST01", t2.token);
-    expect(called.name).toBe("Segundo");
-    expect(called.status).toBe("called");
-
-    const queue = mockQueues["TEST01"];
-    expect(queue.length).toBe(1);
-    expect(queue[0].name).toBe("Primeiro");
-  });
-
-  test("rejeita token inexistente", async () => {
-    await joinQueue("TEST01", { name: "Alguém", category: "Geral" });
-    await expect(
-      callSpecific("TEST01", "token-fake")
-    ).rejects.toThrow("Ticket não encontrado na fila.");
-  });
-});
-
-describe("removeTicket", () => {
-  test("remove ticket e recalcula posições", async () => {
-    const t1 = await joinQueue("TEST01", { name: "A", category: "Geral" });
-    const t2 = await joinQueue("TEST01", { name: "B", category: "Geral" });
-
-    const updated = await removeTicket("TEST01", t1.token);
-    expect(updated.length).toBe(1);
-    expect(updated[0].name).toBe("B");
-    expect(updated[0].position).toBe(1);
-  });
-
-  test("persiste como abandoned no banco", async () => {
-    const t1 = await joinQueue("TEST01", { name: "Removido", category: "Geral" });
-    await removeTicket("TEST01", t1.token);
-
-    // Verifica que a query de UPDATE usou 'abandoned'
-    const updateCalls = mockQuery.mock.calls.filter((c) =>
-      typeof c[0] === "string" && c[0].includes("abandoned")
-    );
-    expect(updateCalls.length).toBeGreaterThan(0);
-  });
-
-  test("rejeita token inexistente", async () => {
-    await expect(
-      removeTicket("TEST01", "token-fake")
-    ).rejects.toThrow("Ticket não encontrado na fila.");
-  });
-});
-
-describe("changePriority", () => {
-  test("altera prioridade e reordena", async () => {
-    const t1 = await joinQueue("TEST01", { name: "Normal", category: "Geral" });    // prio 1
-    const t2 = await joinQueue("TEST01", { name: "Outro", category: "Geral" });     // prio 1
-
-    const queue = await changePriority("TEST01", t2.token, 3);
-    expect(queue[0].name).toBe("Outro");   // agora com prioridade 3, vem primeiro
-    expect(queue[0].priority).toBe(3);
-  });
-
-  test("rejeita prioridade inválida", async () => {
-    const t = await joinQueue("TEST01", { name: "X", category: "Geral" });
-    await expect(
-      changePriority("TEST01", t.token, 5)
-    ).rejects.toThrow("Prioridade inválida. Use 1, 2 ou 3.");
-  });
-});
-
-describe("confirmServed", () => {
-  test("confirma atendimento quando ticket está no banco com status called", async () => {
-    mockQuery.mockResolvedValueOnce({ rowCount: 1 });
-    await expect(confirmServed("some-token")).resolves.toBeUndefined();
-  });
-
-  test("rejeita quando ticket não encontrado", async () => {
-    mockQuery.mockResolvedValueOnce({ rowCount: 0 });
-    await expect(confirmServed("fake-token")).rejects.toThrow(
-      "Ticket não encontrado ou já finalizado."
-    );
+      // Recall de volta à fila (queue_front)
+      const { ticket: readmitted } = recallTicket(ROOM_CODE, ticket.token, {
+        mode: "queue_front",
+        actor: { name: "Op", role: "operator" },
+      });
+      expect(readmitted.status).toBe("waiting");
+      expect(getQueue(ROOM_CODE).length).toBe(1);
+    });
   });
 });

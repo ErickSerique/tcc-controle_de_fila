@@ -1,50 +1,84 @@
 /**
  * screens/LiveTicketScreen.jsx
  *
- * Design System v3.0 — Acompanhamento ao vivo da senha
- * Recebe eventos em tempo real via Socket.io com alertas visuais sem emojis.
+ * Kiwii Design System v3.0 — Acompanhamento ao vivo da senha
+ * Suporta múltiplos guichês, notificações em tempo real, aviso de rechamada e saída voluntária.
  */
-import { useState, useEffect, useCallback, useRef } from "react";
-import socket from "../lib/socket";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Bell,
-  LogOut,
-  Clock,
-  Tag,
-  AlertTriangle,
-  ArrowLeft,
-  CheckCircle,
+  CheckCircle2,
+  XCircle,
+  DoorOpen,
   RotateCcw,
   Sparkles,
+  Clock,
+  Layers,
 } from "lucide-react";
+import socket from "../lib/socket";
+import ConfirmModal from "../components/ConfirmModal";
+
+// Toca som sintético de notificação usando Web Audio API
+const playChime = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+  } catch {}
+};
+
+const formatWait = (min) => {
+  if (!min || min <= 0) return "< 1 min";
+  if (min >= 60) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${h}h ${m}m`;
+  }
+  return `~${min} min`;
+};
 
 const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
   const [ticket, setTicket] = useState(initialTicket);
   const [isNext, setIsNext] = useState(initialTicket?.position === 1);
   const [isCalled, setIsCalled] = useState(initialTicket?.status === "called");
-  const [isServed, setIsServed] = useState(initialTicket?.status === "served");
   const [isRecalled, setIsRecalled] = useState(Boolean(initialTicket?.isRecall));
-  const [hasLeft, setHasLeft] = useState(
-    initialTicket?.status === "abandoned" || initialTicket?.status === "removed"
+  const [terminalStatus, setTerminalStatus] = useState(
+    initialTicket?.status === "served"
+      ? "served"
+      : initialTicket?.status === "removed"
+      ? "removed_by_host"
+      : initialTicket?.status === "abandoned"
+      ? "left_voluntarily"
+      : null
   );
   const [shaking, setShaking] = useState(false);
-  const [showLeave, setShowLeave] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [aheadInCategory, setAheadInCategory] = useState(0);
   const prevPositionRef = useRef(initialTicket?.position);
 
-  // Sincroniza estado ativo com localStorage para acesso a partir de qualquer tela
+  // Sincroniza com localStorage para permitir acesso de qualquer tela / aba
   useEffect(() => {
-    if (hasLeft) {
+    if (terminalStatus) {
       try {
-        localStorage.removeItem("fila_io_active_ticket");
+        localStorage.removeItem("kiwii_active_ticket");
       } catch {}
     } else if (ticket && room) {
       try {
         localStorage.setItem(
-          "fila_io_active_ticket",
+          "kiwii_active_ticket",
           JSON.stringify({
             ticket: {
               ...ticket,
-              status: isCalled ? "called" : isServed ? "served" : "waiting",
+              status: isCalled ? "called" : "waiting",
               isRecall: isRecalled,
             },
             room,
@@ -52,827 +86,481 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
         );
       } catch {}
     }
-  }, [ticket, room, isCalled, isServed, isRecalled, hasLeft]);
-
-  // ── Socket subscriptions ──────────────────────────────────────
-  const joinClient = useCallback(() => {
-    if (initialTicket?.token && room?.code) {
-      socket.emit("client:join", {
-        roomCode: room.code,
-        token: initialTicket.token,
-      });
-    }
-  }, [initialTicket?.token, room?.code]);
+  }, [ticket, room, isCalled, isRecalled, terminalStatus]);
 
   useEffect(() => {
     if (!initialTicket || !room) return;
 
-    joinClient();
-    socket.on("connect", joinClient);
+    const joinRoom = () => {
+      socket.emit("client:join", {
+        roomCode: room.code,
+        token: initialTicket.token,
+      });
+    };
+
+    if (socket.connected) joinRoom();
+    socket.on("connect", joinRoom);
 
     const handleQueueUpdate = ({ roomCode, queue }) => {
-      if (roomCode !== room.code) return;
+      if (roomCode?.toUpperCase() !== room.code?.toUpperCase()) return;
       const me = queue.find((t) => t.token === initialTicket.token);
       if (!me) return;
 
-      if (me.position !== prevPositionRef.current) {
+      if (prevPositionRef.current && me.position < prevPositionRef.current) {
         navigator.vibrate?.(50);
         prevPositionRef.current = me.position;
       }
+
+      const ahead = queue.filter(
+        (t) => t.category === me.category && t.position < me.position
+      ).length;
+      setAheadInCategory(ahead);
       setTicket(me);
       setIsNext(me.position === 1);
-      // Se estava atendido ou chamado e voltou para a fila (readmitido):
-      setIsCalled(false);
-      setIsServed(false);
-      setIsRecalled(false);
-      setHasLeft(false);
     };
 
-    const handleTicketCalled = ({ token }) => {
-      if (token !== initialTicket.token) return;
-      setIsCalled(true);
-      setIsServed(false);
-      setIsRecalled(false);
-      setHasLeft(false);
-      setShaking(true);
-      navigator.vibrate?.([200, 100, 200, 100, 400]);
-      setTimeout(() => setShaking(false), 800);
-    };
-
-    const handleTicketServed = ({ token }) => {
-      if (token !== initialTicket.token) return;
-      setIsServed(true);
-      setIsCalled(false);
-      setIsRecalled(false);
-      setHasLeft(false);
-    };
-
-    const handleTicketRecalled = ({ token }) => {
-      if (token !== initialTicket.token) return;
-      setIsCalled(true);
-      setIsServed(false);
-      setIsRecalled(true);
-      setHasLeft(false);
-      setShaking(true);
-      navigator.vibrate?.([300, 150, 300, 150, 600]);
-      setTimeout(() => setShaking(false), 800);
-    };
-
-    const handleTicketStatus = ({ ticket: statusTicket }) => {
-      if (!statusTicket || statusTicket.token !== initialTicket.token) return;
-      setTicket((prev) => ({ ...prev, ...statusTicket }));
-
-      if (statusTicket.status === "waiting") {
-        setIsCalled(false);
-        setIsServed(false);
-        setIsRecalled(false);
-        setHasLeft(false);
-        setIsNext(statusTicket.position === 1);
-      } else if (statusTicket.status === "called") {
+    // Chamada normal (Alta 5)
+    const handleTicketCalled = (calledTicket) => {
+      if (calledTicket.token === initialTicket.token) {
         setIsCalled(true);
-        setIsServed(false);
-        setHasLeft(false);
-        if (statusTicket.isRecall) {
-          setIsRecalled(true);
-          navigator.vibrate?.([300, 150, 300, 150, 600]);
-        } else {
-          navigator.vibrate?.([200, 100, 200, 100, 400]);
-        }
+        setIsRecalled(false);
+        setTicket((prev) => ({
+          ...prev,
+          counter: calledTicket.counter || prev.counter,
+          status: "called",
+        }));
+        playChime();
+        navigator.vibrate?.([200, 100, 200, 100, 300]);
         setShaking(true);
         setTimeout(() => setShaking(false), 800);
-      } else if (statusTicket.status === "served") {
-        setIsServed(true);
-        setIsCalled(false);
-        setIsRecalled(false);
-        setHasLeft(false);
-      } else if (statusTicket.status === "abandoned" || statusTicket.status === "removed") {
-        setHasLeft(true);
-        setIsCalled(false);
-        setIsServed(false);
-        setIsRecalled(false);
       }
     };
 
-    const handleTicketRemoved = ({ token }) => {
-      if (token !== initialTicket.token) return;
-      setHasLeft(true);
-      setIsCalled(false);
-      setIsServed(false);
-      setIsRecalled(false);
-      try {
-        localStorage.removeItem("fila_io_active_ticket");
-      } catch {}
+    // Rechamada de cliente (Média 1)
+    const handleTicketRecalled = (data) => {
+      const isMe =
+        data.token === initialTicket.token ||
+        data.ticketNumber === initialTicket.ticketNumber ||
+        data.ticket?.token === initialTicket.token;
+
+      if (isMe) {
+        setIsCalled(true);
+        setIsRecalled(true);
+        setTicket((prev) => ({
+          ...prev,
+          counter: data.counterName || data.counter || prev.counter,
+          status: "called",
+          isRecall: true,
+        }));
+        playChime();
+        navigator.vibrate?.([300, 100, 300, 100, 500]);
+        setShaking(true);
+        setTimeout(() => setShaking(false), 1200);
+      }
+    };
+
+    // Atualização de status
+    const handleTicketStatus = ({ token, status, counter }) => {
+      if (token === initialTicket.token) {
+        if (status === "called") {
+          setIsCalled(true);
+          if (counter) setTicket((prev) => ({ ...prev, counter }));
+          playChime();
+          navigator.vibrate?.([200, 100, 200]);
+        } else if (status === "served") {
+          setIsCalled(false);
+          setTerminalStatus("served");
+          localStorage.removeItem("kiwii_active_ticket");
+        } else if (status === "removed") {
+          setIsCalled(false);
+          setTerminalStatus("removed_by_host");
+          localStorage.removeItem("kiwii_active_ticket");
+        }
+      }
+    };
+
+    const handleTicketServed = (servedTicket) => {
+      if (servedTicket.token === initialTicket.token) {
+        setIsCalled(false);
+        setTerminalStatus("served");
+        localStorage.removeItem("kiwii_active_ticket");
+      }
+    };
+
+    const handleTicketRemoved = (removedTicket) => {
+      if (removedTicket.token === initialTicket.token) {
+        setIsCalled(false);
+        setTerminalStatus("removed_by_host");
+        localStorage.removeItem("kiwii_active_ticket");
+      }
     };
 
     socket.on("queue_update", handleQueueUpdate);
     socket.on("ticket_called", handleTicketCalled);
-    socket.on("ticket_served", handleTicketServed);
     socket.on("ticket_recalled", handleTicketRecalled);
     socket.on("ticket_status", handleTicketStatus);
+    socket.on("ticket_served", handleTicketServed);
     socket.on("ticket_removed", handleTicketRemoved);
 
     return () => {
-      socket.off("connect", joinClient);
+      socket.off("connect", joinRoom);
       socket.off("queue_update", handleQueueUpdate);
       socket.off("ticket_called", handleTicketCalled);
-      socket.off("ticket_served", handleTicketServed);
       socket.off("ticket_recalled", handleTicketRecalled);
       socket.off("ticket_status", handleTicketStatus);
+      socket.off("ticket_served", handleTicketServed);
       socket.off("ticket_removed", handleTicketRemoved);
     };
-  }, [initialTicket, room, joinClient]);
+  }, [initialTicket, room]);
 
-  const handleLeaveQueue = () => {
+  const confirmLeaveQueue = () => {
     socket.emit("client:leave", {
       roomCode: room.code,
       token: initialTicket.token,
     });
-    setHasLeft(true);
-    try {
-      localStorage.removeItem("fila_io_active_ticket");
-    } catch {}
+    setTerminalStatus("left_voluntarily");
+    localStorage.removeItem("kiwii_active_ticket");
   };
 
-  const formatWait = (mins) => {
-    if (!mins || mins === 0) return "Agora!";
-    if (mins < 60) return `~${mins} min`;
-    const h = Math.floor(mins / 60),
-      m = mins % 60;
-    return `~${h}h${m > 0 ? ` ${m}min` : ""}`;
-  };
-
-  // ── Loading ───────────────────────────────────────────────────
-  if (!ticket || !room) {
+  // ── ESTADO TERMINAL: Atendido / Removido / Saiu ────────────────
+  if (terminalStatus) {
+    const isSuccess = terminalStatus === "served";
     return (
       <div
         style={{
           minHeight: "100vh",
           background: "var(--bg)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "16px",
-        }}
-      >
-        <div style={{ fontSize: "28px", fontWeight: 800 }}>
-          fila<span style={{ color: "var(--primary)" }}>.io</span>
-        </div>
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            border: "3px solid var(--border)",
-            borderTopColor: "var(--primary)",
-            animation: "spin 0.8s linear infinite",
-          }}
-        />
-        <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-          Sincronizando ticket...
-        </p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  const ticketCode = ticket.token.split("-").slice(-1)[0].toUpperCase();
-
-  // ── Saiu da fila ─────────────────────────────────────────────
-  if (hasLeft) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
           padding: "24px",
-          textAlign: "center",
-        }}
-      >
-        <div
-          style={{
-            width: 72,
-            height: 72,
-            borderRadius: "50%",
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--text-secondary)",
-            marginBottom: "20px",
-          }}
-        >
-          <LogOut size={32} />
-        </div>
-        <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "8px" }}>
-          Você saiu da fila
-        </h2>
-        <p
-          style={{
-            color: "var(--text-secondary)",
-            fontSize: "14px",
-            marginBottom: "32px",
-          }}
-        >
-          Sua senha{" "}
-          <strong className="mono" style={{ color: "var(--primary)" }}>
-            #{ticketCode}
-          </strong>{" "}
-          foi cancelada.
-        </p>
-        <button
-          className="btn btn-primary"
-          onClick={onBack}
-          style={{ padding: "12px 28px", fontSize: "14px", gap: "8px" }}
-        >
-          <ArrowLeft size={16} /> Voltar ao Início
-        </button>
-      </div>
-    );
-  }
-
-  // ── Chamado ───────────────────────────────────────────────────
-  if (isCalled) {
-    const isRecallMode = Boolean(isRecalled);
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "24px",
-          position: "relative",
-          overflow: "hidden",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: isRecallMode
-              ? "radial-gradient(ellipse 90% 70% at 50% 50%, var(--accent-glow) 0%, transparent 70%)"
-              : "radial-gradient(ellipse 90% 70% at 50% 50%, var(--primary-glow) 0%, transparent 70%)",
-          }}
-        />
-        <div
-          className={`animate-fade ${shaking ? "animate-shake" : ""}`}
-          style={{
-            textAlign: "center",
-            position: "relative",
-            zIndex: 1,
-            maxWidth: "400px",
-          }}
-        >
+        <div className="card animate-fade" style={{ maxWidth: "420px", width: "100%", padding: "40px", textAlign: "center" }}>
           <div
             style={{
-              width: 88,
-              height: 88,
+              width: 64,
+              height: 64,
               borderRadius: "50%",
-              background: isRecallMode ? "var(--accent-muted)" : "var(--primary-muted)",
-              border: `2px solid ${isRecallMode ? "var(--accent-border)" : "var(--primary-border)"}`,
+              background: isSuccess ? "var(--success-light)" : "var(--danger-glow)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: isRecallMode ? "var(--accent)" : "var(--primary)",
               margin: "0 auto 20px",
-              boxShadow: `0 0 40px ${isRecallMode ? "var(--accent-glow)" : "var(--primary-glow)"}`,
-              animation: "pulse 2s infinite ease-in-out",
             }}
           >
-            {isRecallMode ? <RotateCcw size={44} /> : <Bell size={44} />}
+            {isSuccess ? (
+              <CheckCircle2 size={32} color="var(--success)" />
+            ) : (
+              <XCircle size={32} color="var(--danger)" />
+            )}
           </div>
 
-          <div style={{ marginBottom: "12px" }}>
-            <span
-              className="tag"
-              style={{
-                background: isRecallMode ? "var(--accent-muted)" : "var(--primary-muted)",
-                color: isRecallMode ? "var(--accent)" : "var(--primary)",
-                border: `1px solid ${isRecallMode ? "var(--accent-border)" : "var(--primary-border)"}`,
-                padding: "6px 14px",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                fontWeight: 700,
-                letterSpacing: "0.06em",
-              }}
-            >
-              {isRecallMode ? <RotateCcw size={13} /> : <Bell size={13} />}
-              {isRecallMode ? "CHAMADO DE VOLTA" : "ATENDIMENTO IMEDIATO"}
-            </span>
-          </div>
-
-          <h1
-            style={{
-              fontSize: "34px",
-              fontWeight: 800,
-              color: isRecallMode ? "var(--accent)" : "var(--primary)",
-              letterSpacing: "-0.02em",
-              marginBottom: "8px",
-              fontFamily: "var(--font-display)",
-            }}
-          >
-            {isRecallMode ? "CHAMADO DE VOLTA!" : "É SUA VEZ!"}
-          </h1>
-          <p
-            style={{
-              fontSize: "15px",
-              color: "var(--text)",
-              marginBottom: "6px",
-              fontWeight: 500,
-              lineHeight: 1.4,
-            }}
-          >
-            {isRecallMode
-              ? "Você foi chamado novamente para retorno ao guichê de atendimento."
-              : "Por favor, dirija-se ao guichê de atendimento agora."}
-          </p>
-          <p
-            className="mono"
-            style={{ fontSize: "12px", color: "var(--text-secondary)" }}
-          >
-            {room.name}
-          </p>
-          <div
-            className="card"
-            style={{
-              marginTop: "24px",
-              padding: "18px 36px",
-              display: "inline-block",
-              borderColor: isRecallMode ? "var(--accent-border)" : "var(--primary-border)",
-              background: isRecallMode ? "var(--accent-muted)" : "var(--primary-muted)",
-            }}
-          >
-            <div
-              className="mono"
-              style={{
-                fontSize: "11px",
-                color: "var(--text-secondary)",
-                letterSpacing: "0.1em",
-                marginBottom: "4px",
-              }}
-            >
-              SUA SENHA
-            </div>
-            <div
-              className="mono"
-              style={{
-                fontSize: "38px",
-                fontWeight: 800,
-                color: isRecallMode ? "var(--accent)" : "var(--primary)",
-                letterSpacing: "0.08em",
-              }}
-            >
-              #{ticketCode}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Atendido ──────────────────────────────────────────────────
-  if (isServed) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "24px",
-          textAlign: "center",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background:
-              "radial-gradient(ellipse 70% 50% at 50% 50%, rgba(52, 211, 153, 0.12) 0%, transparent 70%)",
-            pointerEvents: "none",
-          }}
-        />
-        <div className="animate-fade" style={{ maxWidth: "420px", position: "relative", zIndex: 1 }}>
-          <div
-            style={{
-              width: 80,
-              height: 80,
-              borderRadius: "50%",
-              background: "rgba(52, 211, 153, 0.12)",
-              border: "1px solid rgba(52, 211, 153, 0.3)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--priority-low)",
-              margin: "0 auto 20px",
-              boxShadow: "0 0 32px rgba(52, 211, 153, 0.2)",
-            }}
-          >
-            <CheckCircle size={40} />
-          </div>
-          <div style={{ marginBottom: "12px" }}>
-            <span
-              className="tag"
-              style={{
-                background: "rgba(52, 211, 153, 0.12)",
-                color: "var(--priority-low)",
-                border: "1px solid rgba(52, 211, 153, 0.3)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                fontWeight: 700,
-              }}
-            >
-              <Sparkles size={12} /> ATENDIMENTO CONCLUÍDO
-            </span>
-          </div>
-          <h2 style={{ fontSize: "26px", fontWeight: 800, marginBottom: "8px", fontFamily: "var(--font-display)" }}>
-            Atendimento Finalizado
+          <h2 style={{ fontSize: "20px", marginBottom: "8px" }}>
+            {terminalStatus === "served"
+              ? "Atendimento Concluído"
+              : terminalStatus === "removed_by_host"
+              ? "Senha Cancelada"
+              : "Você saiu da fila"}
           </h2>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              fontSize: "14px",
-              marginBottom: "24px",
-              lineHeight: 1.5,
-            }}
-          >
-            Sua senha{" "}
-            <strong className="mono" style={{ color: "var(--primary)" }}>
-              #{ticketCode}
-            </strong>{" "}
-            foi atendida com sucesso. Caso a equipe precise chamá-lo de volta, esta tela atualizará automaticamente em tempo real.
+
+          <p style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "28px", lineHeight: 1.6 }}>
+            {terminalStatus === "served"
+              ? "Seu atendimento foi finalizado com sucesso. Obrigado pela preferência!"
+              : terminalStatus === "removed_by_host"
+              ? "Sua senha foi cancelada ou dispensada pelo atendente."
+              : "Você deixou a fila voluntariamente e sua senha foi liberada."}
           </p>
-          <div
-            className="card"
-            style={{
-              padding: "16px 24px",
-              marginBottom: "24px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              background: "var(--surface)",
-            }}
-          >
-            <div style={{ textAlign: "left" }}>
-              <div style={{ fontSize: "11px", color: "var(--text-secondary)", textTransform: "uppercase" }}>
-                Unidade
-              </div>
-              <div style={{ fontWeight: 600, fontSize: "14px" }}>{room.name}</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "11px", color: "var(--text-secondary)", textTransform: "uppercase" }}>
-                Categoria
-              </div>
-              <div className="mono" style={{ fontWeight: 700, fontSize: "14px", color: "var(--primary)" }}>
-                {ticket.category}
-              </div>
-            </div>
-          </div>
-          <button
-            className="btn btn-secondary"
-            onClick={onBack}
-            style={{ padding: "12px 28px", fontSize: "14px", gap: "8px" }}
-          >
-            <ArrowLeft size={16} /> Voltar ao Início
+
+          <button className="btn btn-primary" onClick={onBack} style={{ width: "100%", padding: "14px" }}>
+            Voltar ao Início
           </button>
         </div>
       </div>
     );
   }
 
-  // ── Aguardando ────────────────────────────────────────────────
+  // ── ESTADO: Chamado pelo Atendente (Alta 5 / Média 1) ──────────
+  if (isCalled) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "var(--bg)",
+          padding: "24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          className={`card animate-fade ${shaking ? "animate-shake" : ""}`}
+          style={{
+            maxWidth: "440px",
+            width: "100%",
+            padding: "36px 28px",
+            textAlign: "center",
+            borderColor: isRecalled ? "var(--warn)" : "var(--accent)",
+            background: isRecalled ? "rgba(245, 158, 11, 0.08)" : "var(--accent-light)",
+          }}
+        >
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: "50%",
+              background: isRecalled ? "var(--warn)" : "var(--accent)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+              boxShadow: isRecalled ? "0 0 30px rgba(245, 158, 11, 0.4)" : "0 0 30px var(--accent-glow)",
+            }}
+          >
+            {isRecalled ? (
+              <RotateCcw size={36} color="#04141C" />
+            ) : (
+              <Bell size={36} color="#04141C" />
+            )}
+          </div>
+
+          {isRecalled ? (
+            <div
+              style={{
+                display: "inline-block",
+                padding: "4px 12px",
+                borderRadius: "999px",
+                background: "rgba(245, 158, 11, 0.2)",
+                color: "var(--warn)",
+                fontWeight: 700,
+                fontSize: "12px",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                marginBottom: "12px",
+              }}
+            >
+              Chamado de Volta!
+            </div>
+          ) : (
+            <div
+              className="mono"
+              style={{
+                fontSize: "12px",
+                color: "var(--accent)",
+                textTransform: "uppercase",
+                letterSpacing: "0.15em",
+                marginBottom: "8px",
+              }}
+            >
+              É a sua vez!
+            </div>
+          )}
+
+          <div
+            className="mono"
+            style={{
+              fontSize: "64px",
+              fontWeight: 800,
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              color: isRecalled ? "var(--warn)" : "var(--accent)",
+              marginBottom: "8px",
+            }}
+          >
+            #{ticket.ticketNumber}
+          </div>
+
+          <div style={{ fontSize: "16px", fontWeight: 600, marginBottom: "20px" }}>
+            {ticket.name}
+          </div>
+
+          <div
+            className="card"
+            style={{
+              padding: "20px",
+              marginBottom: "24px",
+              background: "var(--surface)",
+              border: `1px solid ${isRecalled ? "var(--warn)" : "var(--accent)"}`,
+            }}
+          >
+            <div
+              className="mono"
+              style={{
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                marginBottom: "6px",
+              }}
+            >
+              Dirija-se ao
+            </div>
+            <div
+              style={{
+                fontSize: "24px",
+                fontWeight: 800,
+                color: isRecalled ? "var(--warn)" : "var(--accent)",
+              }}
+            >
+              {ticket.counter || "Balcão de Atendimento"}
+            </div>
+          </div>
+
+          <p style={{ color: "var(--text-muted)", fontSize: "13px", lineHeight: 1.6, margin: 0 }}>
+            {isRecalled
+              ? "O atendente solicitou seu retorno imediato ao guichê."
+              : "Por favor, dirija-se imediatamente ao balcão indicado com seu documento em mãos."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ESTADO: Aguardando na Fila ─────────────────────────────────
   return (
     <div
       style={{
         minHeight: "100vh",
         background: "var(--bg)",
+        padding: "24px",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: "24px",
-        position: "relative",
-        overflow: "hidden",
       }}
     >
-      {isNext && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background:
-              "radial-gradient(ellipse 80% 60% at 50% 50%, var(--primary-glow) 0%, transparent 60%)",
-            transition: "opacity 1s",
-          }}
-        />
-      )}
-
       <div
-        className={`animate-fade ${shaking ? "animate-shake" : ""}`}
+        className="card animate-fade"
         style={{
-          position: "relative",
-          zIndex: 1,
+          maxWidth: "420px",
           width: "100%",
-          maxWidth: "380px",
+          padding: "36px 28px",
           textAlign: "center",
         }}
       >
-        <p
-          className="mono"
-          style={{
-            fontSize: "11px",
-            color: "var(--text-secondary)",
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            marginBottom: "28px",
-          }}
-        >
-          fila.io · {room.name}
-        </p>
-
-        {/* Número da senha */}
         <div style={{ marginBottom: "24px" }}>
-          <div
-            className="mono"
-            style={{
-              fontSize: "11px",
-              color: "var(--text-secondary)",
-              letterSpacing: "0.1em",
-              marginBottom: "6px",
-            }}
-          >
-            SENHA
+          <div className="display" style={{ fontSize: "18px", fontWeight: 800, marginBottom: "2px" }}>
+            {room.name}
           </div>
-          <div
-            className="mono"
-            style={{
-              fontSize: "56px",
-              fontWeight: 800,
-              letterSpacing: "0.05em",
-              color: isNext ? "var(--primary)" : "var(--text)",
-              transition: "color 0.4s",
-            }}
-          >
-            #{ticketCode}
+          <div className="mono" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+            Sala {room.code}
           </div>
         </div>
 
-        {/* Card de posição */}
-        <div
-          className="card"
-          style={{
-            padding: "24px 20px",
-            marginBottom: "16px",
-            border: `1px solid ${isNext ? "var(--primary)" : "var(--border)"}`,
-            transition: "border-color 0.4s",
-            background: isNext ? "var(--primary-muted)" : "var(--surface)",
-          }}
-        >
+        {isNext && (
+          <div
+            style={{
+              background: "var(--warn-light)",
+              border: "1px solid var(--warn)",
+              borderRadius: "8px",
+              padding: "10px 14px",
+              marginBottom: "20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              color: "var(--warn)",
+              fontSize: "13px",
+              fontWeight: 600,
+            }}
+          >
+            <Bell size={16} /> Você é o próximo! Fique atento.
+          </div>
+        )}
+
+        <div style={{ marginBottom: "28px" }}>
           <div
             className="mono"
             style={{
               fontSize: "11px",
-              color: "var(--text-secondary)",
+              color: "var(--text-muted)",
               textTransform: "uppercase",
               letterSpacing: "0.1em",
               marginBottom: "8px",
             }}
           >
-            Posição na Fila
+            Sua Senha
           </div>
           <div
             className="mono"
             style={{
-              fontSize: "72px",
+              fontSize: "64px",
               fontWeight: 800,
               lineHeight: 1,
-              color: isNext ? "var(--primary)" : "var(--text)",
-              transition: "color 0.4s",
+              letterSpacing: "-0.02em",
+              color: isNext ? "var(--warn)" : "var(--accent)",
+              marginBottom: "8px",
             }}
           >
-            {ticket.position}º
+            #{ticket.ticketNumber}
           </div>
-          {isNext && (
-            <div
-              style={{
-                marginTop: "12px",
-                color: "var(--primary)",
-                fontSize: "13px",
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-              }}
-            >
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: "var(--primary)",
-                }}
-              />
-              Você é o próximo! Fique atento
-            </div>
-          )}
+          <div style={{ fontSize: "16px", fontWeight: 600 }}>{ticket.name}</div>
         </div>
 
-        {/* Stats */}
+        {/* Estatísticas de posição e tempo */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "12px",
-            marginBottom: "24px",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: "10px",
+            marginBottom: "28px",
           }}
         >
-          <div
-            className="card"
-            style={{ padding: "14px", textAlign: "center" }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                color: "var(--text-secondary)",
-                marginBottom: "6px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "4px",
-              }}
-            >
-              <Clock size={12} /> Espera estimada
+          <div className="card" style={{ padding: "14px", textAlign: "center" }}>
+            <div className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase" }}>
+              Posição Geral
             </div>
-            <div
-              className="mono"
-              style={{
-                fontSize: "18px",
-                fontWeight: 700,
-                color: "var(--accent)",
-              }}
-            >
+            <div className="mono" style={{ fontSize: "22px", fontWeight: 800, color: "var(--text)" }}>
+              {ticket.position}º
+            </div>
+            {aheadInCategory > 0 && (
+              <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>
+                ({aheadInCategory} no seu tipo)
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ padding: "14px", textAlign: "center" }}>
+            <div className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase" }}>
+              Espera Est.
+            </div>
+            <div className="mono" style={{ fontSize: "18px", fontWeight: 700, color: "var(--warn)" }}>
               {formatWait(ticket.estimatedWait)}
             </div>
           </div>
-          <div
-            className="card"
-            style={{ padding: "14px", textAlign: "center" }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                color: "var(--text-secondary)",
-                marginBottom: "6px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "4px",
-              }}
-            >
-              <Tag size={12} /> Categoria
+
+          <div className="card" style={{ padding: "14px", textAlign: "center" }}>
+            <div className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase" }}>
+              Serviço
             </div>
-            <div
-              style={{
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "var(--primary)",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--info)" }}>
               {ticket.category}
             </div>
           </div>
         </div>
 
-        <p
-          style={{
-            color: "var(--text-dim)",
-            fontSize: "12px",
-            lineHeight: 1.5,
-            marginBottom: "24px",
-          }}
-        >
-          Mantenha esta tela aberta. Seu aparelho notificará quando chegar a sua vez.
+        <p className="mono" style={{ color: "var(--text-dim)", fontSize: "11px", lineHeight: 1.6, marginBottom: "20px" }}>
+          Mantenha esta tela aberta.<br />Você será alertado quando for chamado ao guichê.
         </p>
 
-        {/* Botão sair da fila */}
         <button
-          onClick={() => setShowLeave(true)}
-          className="btn btn-secondary"
-          style={{
-            width: "100%",
-            padding: "12px",
-            fontSize: "13px",
-            color: "var(--danger)",
-            borderColor: "var(--danger-border)",
-            gap: "6px",
-          }}
+          className="btn"
+          onClick={() => setShowLeaveConfirm(true)}
+          style={{ color: "var(--text-dim)", padding: "10px 22px", fontSize: "12px" }}
         >
-          <LogOut size={14} /> Sair da Fila
+          <DoorOpen size={14} /> Sair da Fila
         </button>
       </div>
 
-      {/* ── Modal confirmação de saída ── */}
-      {showLeave && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 100,
-            background: "rgba(0,0,0,0.7)",
-            backdropFilter: "blur(6px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "24px",
-          }}
-        >
-          <div
-            className="card animate-fade"
-            style={{
-              background: "var(--surface)",
-              width: "100%",
-              maxWidth: "360px",
-              padding: "28px",
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: "50%",
-                background: "var(--danger-muted)",
-                border: "1px solid var(--danger-border)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--danger)",
-                margin: "0 auto 16px",
-              }}
-            >
-              <LogOut size={24} />
-            </div>
-            <h3
-              style={{
-                fontWeight: 700,
-                fontSize: "18px",
-                marginBottom: "8px",
-                color: "var(--text)",
-              }}
-            >
-              Sair da fila?
-            </h3>
-            <p
-              style={{
-                color: "var(--text-secondary)",
-                fontSize: "13px",
-                marginBottom: "24px",
-                lineHeight: 1.5,
-              }}
-            >
-              Sua senha{" "}
-              <strong className="mono" style={{ color: "var(--primary)" }}>
-                #{ticketCode}
-              </strong>{" "}
-              será cancelada e você perderá a sua posição atual.
-            </p>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowLeave(false)}
-                style={{ flex: 1, padding: "12px", fontSize: "13px" }}
-              >
-                Permanecer
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={handleLeaveQueue}
-                style={{ flex: 1, padding: "12px", fontSize: "13px" }}
-              >
-                Confirmar Saída
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={showLeaveConfirm}
+        onClose={() => setShowLeaveConfirm(false)}
+        onConfirm={confirmLeaveQueue}
+        title="Sair da fila?"
+        message="Você perderá sua posição atual. Caso queira voltar, precisará gerar uma nova senha."
+        confirmText="Sair da Fila"
+        danger
+      />
     </div>
   );
 };
