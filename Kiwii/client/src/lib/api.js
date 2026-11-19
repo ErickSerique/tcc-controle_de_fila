@@ -129,6 +129,67 @@ export const saveQueueTemplate = (orgId, categories) =>
     body: JSON.stringify({ categories }),
   });
 
+// ── Convites Temporários & Fila de Entrada ───────────────────────
+export const generateTempInviteLink = (orgId, expiresInMinutes = 30) =>
+  apiFetch(`/api/orgs/${orgId}/temp-invite-link`, {
+    orgId,
+    method: "POST",
+    body: JSON.stringify({ expiresInMinutes }),
+  });
+
+export const requestJoinOrg = (token, name) =>
+  apiFetch(`/api/orgs/invites/${token}/request-join`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+
+export const fetchJoinRequests = (orgId) =>
+  apiFetch(`/api/orgs/${orgId}/join-requests`, { orgId });
+
+export const approveJoinRequest = (orgId, requestId, role) =>
+  apiFetch(`/api/orgs/${orgId}/join-requests/${requestId}/approve`, {
+    orgId,
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
+
+export const rejectJoinRequest = (orgId, requestId) =>
+  apiFetch(`/api/orgs/${orgId}/join-requests/${requestId}/reject`, {
+    orgId,
+    method: "POST",
+  });
+
+// ── Salas Permanentes (Salas Salvas / Presets) ─────────────────────
+export const fetchSavedRooms = (orgId) =>
+  apiFetch(`/api/orgs/${orgId}/saved-rooms`, { orgId });
+
+export const createSavedRoom = (orgId, data) =>
+  apiFetch(`/api/orgs/${orgId}/saved-rooms`, {
+    orgId,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const updateSavedRoom = (orgId, roomId, data) =>
+  apiFetch(`/api/orgs/${orgId}/saved-rooms/${roomId}`, {
+    orgId,
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+export const deleteSavedRoom = (orgId, roomId) =>
+  apiFetch(`/api/orgs/${orgId}/saved-rooms/${roomId}`, {
+    orgId,
+    method: "DELETE",
+  });
+
+export const openDayRoom = (orgId, data) =>
+  apiFetch("/api/rooms/open-day", {
+    orgId,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
 // ── Rooms ─────────────────────────────────────────────────────────
 export const createRoom = (orgId, data) =>
   apiFetch("/api/rooms", { orgId, method: "POST", body: JSON.stringify(data) });

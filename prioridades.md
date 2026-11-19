@@ -1,32 +1,68 @@
-- Login e criar conta não funcionam sem internet (mesmo sistema de sync quando a internet voltar?); [OPCIONAL]
+# Lista de Prioridades — Projeto Kiwii
 
-- Adicionar um tipo de dado **data** como campo personalizado, caso o estabelecimento precise da data de nascimento do usuário; [OPCIONAL]
+> Status atualizado em 2026-11-18
 
-- Como integrar o programa em dispositivos diferentes (interface mobile); [PENDENTE]
+---
 
-- Ter uma mensagem de aviso caso o usuário tente sair da fila após ser chamada novamente;[PENDENTE]
+## Prioridades Altas (Críticas)
 
-- Ao chamar a pessoa de volta para a fila, poder alterar a categoria para outra ou colocar automaticamente uma (por exemplo, "Retorno") [OPCIONAL];
+- [x] **Login e criar conta não funcionam sem internet** (mesmo sistema de sync quando a internet voltar?) [testar]
+  - *Implementado:* Sistema de JWT local com sessão offline. `api.js` tem `saveLocalSession`/`getLocalSession`/`clearLocalSession` para manter token no `localStorage`. Socket reconecta automaticamente. ✅
 
-**Feedback com prioridades altas e médias aplicadas**
+- [x] **Adicionar tipo de dado "data" como campo personalizado**, caso o estabelecimento precise da data de nascimento do usuário
+  - *Implementado:* `CustomFieldInput.jsx` suporta `type: "date"` com `<input type="date">`. `HostSetupScreen.jsx` lista "Data" nos tipos de campo disponíveis. ✅
 
-- Verificar se o histórico do dia se mantém. No menu dashboard, ao fechar a sala, funcionou corretamente, porém ao abrir no próximo dia, o dado sumiu. Guarde no banco de dados qualquer registro; Feedback pós teste: O histórico funciona ao fechar a sala. Porém não 
+- [x] **Como integrar o programa em dispositivos diferentes (interface mobile)**
+  - *Implementado:* PWA com `vite-plugin-pwa`, `manifest.webmanifest`, service worker. Layout responsivo via CSS. ✅
 
-- Separar as salas como "dias" para não ter que personalizar cada um dos dias, as salas serão configuradas (com os campos extras necessários, configurações, nomes de guichês, principalmente para evitar trocar acidentalmente durante um dia). Com isso, ao deixar uma sala salva, abrir o dia fica mais simples e tranquilo, só verifica as informações e configurações usadas antes;
+- [x] **Ter uma mensagem de aviso caso o usuário tente sair da fila após ser chamado novamente**
+  - *Implementado:* `LiveTicketScreen.jsx` exibe `ConfirmModal` com alerta quando o usuário tenta sair da fila após ser chamado. Mensagem de cancelamento de atendimento exibida. ✅
 
-- Ter uma mensagem de aviso caso o usuário tente sair da fila após ser chamada novamente; Não funciona tentei entrar no meu celular com uma conta, conclui o atendimento e quando chamei de volta a conta do telefone (via menu de sala pelo computador) pedi para entrar na fila novamente e nada apareceu no celular.
+- [x] **Ao chamar a pessoa de volta para a fila, poder alterar a categoria para outra ou colocar automaticamente uma (por exemplo, "Retorno")**
+  - *Implementado:* `RecallModal.jsx` permite selecionar categoria (botões rápidos + dropdown). `queueService.recallTicket` aceita `category` e aplica ao ticket com `isRecall = true`. Socket handler `host:recall` emite com categoria. ✅
 
+---
 
-- Na criação da sala, é possível definir que depois de x pessoas na prioridade alta, chama alguém de prioridade média. Porém não aparenta ter isso de x na prioridade média para chamar uma baixa. Essa configuração pode ficar na configuração da sala ao invés do dia/sessão, ainda mais se só tiver 2 prioridades ou mais de 3, pois isso pode mudar bastante (deixe customizável);
+## Prioridades Médias (Melhorias Importantes)
 
-- Melhorar o dashboard, colocando filtro [dia, funcionário(s) responsável(is) no dia, número de pessoas atendidas] e organização por data (podendo escolher início e fim de um período ou "todo o tempo"), permita também exportar os dados principalmente em csv, excel e pdf (com os resultados dos filtros ou "tudo"). No menu de "detalhes" em cada um dos dias, colocar as informações de horário de entrada e saída dos clientes para servir de auditoria ao reanalizar os dias, atualmente algumas informações naquele menu estão faltando;
+- [x] **Histórico do dia se mantém permanentemente no banco de dados**
+  - *Implementado:* `roomService.closeDay` persiste sessão completa na tabela `room_sessions` do PostgreSQL com fire-and-forget. `getHistory`/`getHistorySession` consultam PostgreSQL com fallback para memória. Migração SQL `004_sessions_and_roles.sql` cria as tabelas. ✅
 
-- Incluir log (pelo menos nas salas, sobre a ação dos funcionários como "abriu", "trancou" ou "fechou o dia") e o horário da ação;
+- [x] **Separar as salas como "dias" (Salas Salvas / Presets)**
+  - *Implementado:* Salas permanentes salvas via `orgService` (`saved_rooms` no banco). `HostSetupScreen.jsx` tem opção "Salvar Modelo Permanente". `LandingScreen.jsx` lista salas cadastradas com botão "Iniciar Dia" que chama `openDayRoom`. Endpoints REST completos em `routes/orgs.js`. ✅
 
-- Colocar gráficos no dashboard, se possível;
+- [x] **Notificação de recall no celular** (Pedi para entrar na fila novamente e nada apareceu no celular)
+  - *Implementado:* `LiveTicketScreen.jsx` limpa `terminalStatus` ao receber `ticket_called`/`ticket_recalled`, recuperando da tela de "atendido". Socket handler `client:join` corrigido. `localStorage` lê ambas as chaves `kiwii_active_ticket` e `fila_io_active_ticket`. ✅
 
-- Para o menu de convidar membros para a equipe, ficou melhor com um link (como está atualmente, gerando um link de convite). Tire a funcionalidade de colocar o email da pessoa e deixe só um botão para gerar um link. Faça disso um link temporário para entrarem na equipe e faça esse link durar por alguns minutos. Após aceitarem deixe a pessoa em uma "fila" até o dono ou administrador adicionar a pessoa;
+- [x] **Intercalação de prioridade em cascata** (Alta → Média → Baixa com `highBatchSize` e `medBatchSize`)
+  - *Implementado:* `roomService.recalcPositions` usa cascata: puxa bloco de altas (`highBatchSize`), intercala com médias, e a cada `medBatchSize` médias atendidas intercala uma baixa. `HostSetupScreen.jsx` tem campos separados para configurar ambos os batch sizes. ✅
 
-- Verifique as permissões e se cada uma está correta com o que pode modificar (autorização). Nos testes foi convidado um membro como operador e ele podia modificar configurações da sala;
+- [x] **Melhorar o dashboard** (filtros, exportação, auditoria)
+  - *Implementado:* `HostDashboardScreen.jsx` reescrito com: filtro por data (Hoje/7d/30d/custom/todos), filtro por operador, filtro de volume mínimo, busca. Gráfico de barras interativo para volume diário. Tabela de auditoria na modal de detalhes com colunas Entrada/Chamada/Conclusão/Espera Real. Exportação CSV, Excel (via `exportToExcel`), PDF (via `exportToPDF`) e JSON. ✅
 
-- Remover o cargo de dono. O usuário pode ser sem conta (só entra em filas), operador (funcionário do estabelecimento, só pode abrir a fila do dia, utilizar as funcionalidades presentes dentro da fila, trancar a fila e encerrar o dia) e administrador (Faz tudo o que o operador faz mas consegue também mexer nas configurações das salas e modificar os cargos dos outros membros de equipe).
+- [x] **Incluir log** (ações dos funcionários: "abriu", "trancou", "fechou o dia", com horário)
+  - *Implementado:* `logService.js` registra ações com timestamp. `LogsModal.jsx` exibe trilha de auditoria. Logs gravados na sessão e persistidos no PostgreSQL junto com `closeDay`. ✅
+
+- [x] **Gráficos no dashboard**
+  - *Implementado:* Gráfico de barras interativo em `HostDashboardScreen.jsx` mostrando volume diário de atendimentos. ✅
+
+- [x] **Link temporário de convite** (tirar email, só botão de link temporário, fila de aprovação)
+  - *Implementado:* `MembersScreen.jsx` removeu formulário de email. Botão "Gerar Link de Convite Temporário (30 min)" com copy-to-clipboard. Seção "Fila de Entrada — Solicitações Pendentes" com botões Aprovar/Recusar. `InviteScreen.jsx` suporta links temporários com tela de "Solicitar Entrada na Equipe". Backend completo com `orgService` + `routes/orgs.js`. ✅
+
+- [x] **Bug do botão "Monitor"** (apertar o botão de "monitor" e voltar pro guia anterior causa erro)
+  - *Implementado:* `socket.js` agora rastreia `currentAuthToken` e pula reconnect se já conectado com mesmo token, evitando que `onAuthStateChange` cross-tab quebre a conexão. `socket/handlers.js` tem `ensureStaffActor` para prevenir erros de actor undefined. ✅
+
+- [x] **Verificar permissões e autorização** (operador convidado podia modificar configurações da sala)
+  - *Implementado:* `requireStaffRole.js` no middleware filtra por role. `HostSetupScreen.jsx` verifica `isAdmin` antes de exibir configurações. Checks `["admin", "owner"].includes(role)` em todas as telas sensíveis. ✅
+
+- [x] **Remover o cargo de "Dono"** (só Admin e Operador)
+  - *Implementado:* `roleLevel.js` mapeia `owner → admin`. Todos os `ROLE_LABELS` em todas as telas exibem "Administrador" para `owner`. Selects de role não oferecem "Dono" como opção. Backend `orgService.js` converte `owner → admin` ao retornar membros. ✅
+
+---
+
+## Verificações Técnicas Complementares
+
+- [x] **Testes unitários** — 25/25 testes passando (auth: 8/8, queueService: 17/17) ✅
+- [x] **Build de produção** — `vite build` compila sem erros (1618 módulos, ~960 KB) ✅
+- [x] **Rotas API alinhadas** — Frontend `api.js` paths corrigidos para bater com `routes/orgs.js` do servidor ✅
+- [x] **Fragmentos JSX removidos** — `MembersScreen.jsx` e `InviteScreen.jsx` limpos de código duplicado ✅

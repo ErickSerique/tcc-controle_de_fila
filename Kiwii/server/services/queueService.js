@@ -265,15 +265,20 @@ const leaveQueue = (roomCode, token) => {
  *       'queue_front' → volta para o início da fila, respeitando a
  *                        prioridade original da categoria do ticket
  */
-const recallTicket = (roomCode, token, { mode = "counter", counter, actor } = {}) => {
+const recallTicket = (roomCode, token, { mode = "counter", counter, category, actor } = {}) => {
   const room = rooms.get(roomCode?.toString().trim().toUpperCase());
   if (!room) throw new Error("Sala não encontrada.");
 
   const ticket = room.archive.find((t) => t.token === token);
   if (!ticket) throw new Error("Ticket não encontrado no histórico do dia.");
 
+  if (category && typeof category === "string") {
+    ticket.category = category;
+  }
+
   if (mode === "counter") {
     ticket.status = "called";
+    ticket.isRecall = true;
     ticket.calledAt = Date.now();
     ticket.counter = counter || room.counters[0]?.name || "Guichê Único";
     ticket.servedAt = null;
@@ -284,6 +289,7 @@ const recallTicket = (roomCode, token, { mode = "counter", counter, actor } = {}
       token,
       name: ticket.name,
       counter: ticket.counter,
+      category: ticket.category,
     });
     return { mode, ticket };
   }
@@ -297,6 +303,7 @@ const recallTicket = (roomCode, token, { mode = "counter", counter, actor } = {}
     const earliest = room.queue.length > 0 ? Math.min(...room.queue.map((t) => t.joinedAt)) : Date.now();
 
     ticket.status = "waiting";
+    ticket.isRecall = true;
     ticket.joinedAt = earliest - 1;
     ticket.calledAt = null;
     ticket.servedAt = null;
@@ -307,7 +314,7 @@ const recallTicket = (roomCode, token, { mode = "counter", counter, actor } = {}
 
     room.queue.push(ticket);
     recalcPositions(room.queue, room.priorityRule);
-    logAction(room, actor, "ticket.readmitted_queue", { token, name: ticket.name });
+    logAction(room, actor, "ticket.readmitted_queue", { token, name: ticket.name, category: ticket.category });
     return { mode, ticket };
   }
 

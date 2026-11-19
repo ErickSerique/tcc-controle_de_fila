@@ -122,6 +122,7 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
     // Chamada normal (Alta 5)
     const handleTicketCalled = (calledTicket) => {
       if (calledTicket.token === initialTicket.token) {
+        setTerminalStatus(null);
         setIsCalled(true);
         setIsRecalled(false);
         setTicket((prev) => ({
@@ -136,7 +137,7 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
       }
     };
 
-    // Rechamada de cliente (Média 1)
+    // Rechamada de cliente (Média 1 & Prioridade 4/5)
     const handleTicketRecalled = (data) => {
       const isMe =
         data.token === initialTicket.token ||
@@ -144,11 +145,13 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
         data.ticket?.token === initialTicket.token;
 
       if (isMe) {
+        setTerminalStatus(null);
         setIsCalled(true);
         setIsRecalled(true);
         setTicket((prev) => ({
           ...prev,
           counter: data.counterName || data.counter || prev.counter,
+          category: data.category || prev.category,
           status: "called",
           isRecall: true,
         }));
@@ -272,7 +275,16 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
               : "Você deixou a fila voluntariamente e sua senha foi liberada."}
           </p>
 
-          <button className="btn btn-primary" onClick={onBack} style={{ width: "100%", padding: "14px" }}>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              try {
+                localStorage.removeItem("kiwii_active_ticket");
+              } catch {}
+              onBack();
+            }}
+            style={{ width: "100%", padding: "14px" }}
+          >
             Voltar ao Início
           </button>
         </div>
@@ -406,12 +418,30 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
             </div>
           </div>
 
-          <p style={{ color: "var(--text-muted)", fontSize: "13px", lineHeight: 1.6, margin: 0 }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "13px", lineHeight: 1.6, marginBottom: "24px" }}>
             {isRecalled
               ? "O atendente solicitou seu retorno imediato ao guichê."
               : "Por favor, dirija-se imediatamente ao balcão indicado com seu documento em mãos."}
           </p>
+
+          <button
+            className="btn"
+            onClick={() => setShowLeaveConfirm(true)}
+            style={{ color: "var(--danger)", padding: "10px 20px", fontSize: "12px" }}
+          >
+            <DoorOpen size={14} /> Sair da Fila / Desistir
+          </button>
         </div>
+
+        <ConfirmModal
+          open={showLeaveConfirm}
+          onClose={() => setShowLeaveConfirm(false)}
+          onConfirm={confirmLeaveQueue}
+          title="Atenção: Você foi chamado para atendimento!"
+          message="Atenção! Você já foi chamado para atendimento! Se você sair agora, seu atendimento será cancelado e sua vez será descartada. Deseja realmente sair?"
+          confirmText="Sim, Cancelar e Sair"
+          danger
+        />
       </div>
     );
   }

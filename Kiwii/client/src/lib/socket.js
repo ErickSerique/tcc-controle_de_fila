@@ -21,11 +21,17 @@ const socket = io(SERVER_URL, {
   transports: ["websocket", "polling"],
 });
 
+let currentAuthToken = null;
+
 /**
  * Reconecta o socket com token de autenticação do Supabase.
  * Chamado pelo useAuth quando a sessão é estabelecida.
  */
 export const connectWithAuth = (accessToken) => {
+  if (socket.connected && currentAuthToken === accessToken) {
+    return;
+  }
+  currentAuthToken = accessToken;
   if (socket.connected) socket.disconnect();
   socket.auth = { token: accessToken };
   socket.connect();
@@ -35,6 +41,7 @@ export const connectWithAuth = (accessToken) => {
  * Desconecta e reconecta como anônimo (após logout).
  */
 export const connectAnonymous = () => {
+  currentAuthToken = null;
   if (socket.connected) socket.disconnect();
   socket.auth = {};
   socket.connect();

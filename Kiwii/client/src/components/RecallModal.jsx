@@ -9,21 +9,28 @@ import Modal from "./Modal";
  *   - "counter"     → chama direto para um guichê (pula a fila)
  *   - "queue_front" → readmite no início da fila (respeitando prioridade)
  */
-const RecallModal = ({ open, onClose, ticket, counters, onRecall, myCounterName }) => {
+const RecallModal = ({ open, onClose, ticket, counters = [], categories = [], onRecall, myCounterName }) => {
   const [mode, setMode] = useState("counter");
   const [counter, setCounter] = useState(counters?.[0]?.name || "");
+  const [category, setCategory] = useState("Retorno");
 
   useEffect(() => {
     if (open) {
       setMode("counter");
       setCounter(myCounterName || counters?.[0]?.name || "");
+      setCategory("Retorno");
     }
   }, [open, counters, myCounterName]);
 
   if (!ticket) return null;
 
   const handleConfirm = () => {
-    onRecall(ticket.token, mode, mode === "counter" ? (myCounterName || counter) : undefined);
+    onRecall(
+      ticket.token,
+      mode,
+      mode === "counter" ? (myCounterName || counter) : undefined,
+      category || "Retorno"
+    );
     onClose();
   };
 
@@ -148,6 +155,74 @@ const RecallModal = ({ open, onClose, ticket, counters, onRecall, myCounterName 
           </select>
         </div>
       )}
+
+      {/* Seletor de Categoria para Rechamada (Prioridade 5) */}
+      <div style={{ marginBottom: "20px" }}>
+        <label
+          className="mono"
+          style={{
+            fontSize: "11px",
+            color: "var(--text-secondary)",
+            display: "block",
+            marginBottom: "6px",
+            textTransform: "uppercase",
+          }}
+        >
+          Categoria no Chamado
+        </label>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setCategory("Retorno")}
+            style={{
+              padding: "6px 12px",
+              fontSize: "12px",
+              fontWeight: 600,
+              background: category === "Retorno" ? "var(--primary-muted)" : "var(--surface)",
+              borderColor: category === "Retorno" ? "var(--primary)" : "var(--border)",
+              color: category === "Retorno" ? "var(--primary)" : "var(--text)",
+            }}
+          >
+            Retorno (Padrão)
+          </button>
+          {ticket.category && ticket.category !== "Retorno" && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setCategory(ticket.category)}
+              style={{
+                padding: "6px 12px",
+                fontSize: "12px",
+                fontWeight: 600,
+                background: category === ticket.category ? "var(--primary-muted)" : "var(--surface)",
+                borderColor: category === ticket.category ? "var(--primary)" : "var(--border)",
+                color: category === ticket.category ? "var(--primary)" : "var(--text)",
+              }}
+            >
+              Manter ({ticket.category})
+            </button>
+          )}
+        </div>
+        <select
+          className="input"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          style={{ width: "100%" }}
+        >
+          <option value="Retorno">Retorno</option>
+          {ticket.category && ticket.category !== "Retorno" && (
+            <option value={ticket.category}>{ticket.category} (Original)</option>
+          )}
+          {categories
+            .filter((c) => c.name !== "Retorno" && c.name !== ticket.category)
+            .map((c) => (
+              <option key={c.id || c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+        </select>
+      </div>
 
       <div style={{ display: "flex", gap: "10px" }}>
         <button className="btn btn-secondary" onClick={onClose} style={{ flex: 1, padding: "12px" }}>

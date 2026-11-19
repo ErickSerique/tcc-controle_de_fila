@@ -19,7 +19,7 @@ import {
   Clock,
   Layers,
 } from "lucide-react";
-import { apiFetch, fetchQueueTemplate, saveQueueTemplate } from "../lib/api";
+import { apiFetch, fetchQueueTemplate, saveQueueTemplate, createSavedRoom } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
 const PRIORITY_OPTIONS = [
@@ -28,11 +28,12 @@ const PRIORITY_OPTIONS = [
   { value: 1, label: "Baixa", color: "var(--success)" },
 ];
 
-const ROLE_LABELS = { owner: "Dono", admin: "Admin", operator: "Operador" };
+const ROLE_LABELS = { owner: "Admin", admin: "Admin", operator: "Operador" };
 
 const FIELD_TYPES = [
   { value: "text", label: "Texto" },
   { value: "number", label: "Número" },
+  { value: "date", label: "Data" },
   { value: "select", label: "Seleção (lista)" },
   { value: "checkbox", label: "Sim/Não" },
 ];
@@ -58,7 +59,9 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
   const operatorName = user?.profile?.name ?? user?.email ?? "";
 
   const [roomName, setRoomName] = useState("");
-  const [priorityBatchSize, setPriorityBatchSize] = useState(3);
+  const [highBatchSize, setHighBatchSize] = useState(3);
+  const [medBatchSize, setMedBatchSize] = useState(2);
+  const [saveAsPermanent, setSaveAsPermanent] = useState(true);
 
   const [categories, setCategories] = useState(() => {
     try {
@@ -206,6 +209,21 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
         );
       } catch {}
 
+      const isAdmin = ["admin", "owner"].includes(activeOrg.role);
+
+      if (isAdmin && saveAsPermanent) {
+        try {
+          await createSavedRoom(activeOrg.id, {
+            name: roomName.trim(),
+            deskCount: counters.length,
+            categories,
+            customFields,
+            highBatchSize: Math.max(0, parseInt(highBatchSize, 10) || 0),
+            medBatchSize: Math.max(0, parseInt(medBatchSize, 10) || 0),
+          });
+        } catch {}
+      }
+
       const data = await apiFetch("/api/rooms", {
         method: "POST",
         orgId: activeOrg.id,
@@ -214,13 +232,39 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
           categories,
           counters,
           customFields,
-          priorityBatchSize: Math.max(0, parseInt(priorityBatchSize, 10) || 0),
+          highBatchSize: Math.max(0, parseInt(highBatchSize, 10) || 0),
+          medBatchSize: Math.max(0, parseInt(medBatchSize, 10) || 0),
         }),
       });
 
       onRoomCreated(data.code, data.room);
     } catch (err) {
       setError(err.message);
+      setLoading(false);
+    }
+  };
+
+  const handleSaveOnlyPermanent = async () => {
+    if (!roomName.trim()) {
+      setError("Informe o nome da sala permanente.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      await createSavedRoom(activeOrg.id, {
+        name: roomName.trim(),
+        deskCount: counters.length,
+        categories,
+        customFields,
+        highBatchSize: Math.max(0, parseInt(highBatchSize, 10) || 0),
+        medBatchSize: Math.max(0, parseInt(medBatchSize, 10) || 0),
+      });
+      alert("Sala permanente salva com sucesso!");
+      onBack();
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setLoading(false);
     }
   };
@@ -300,7 +344,7 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
             )}
           </div>
           <p style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "10px" }}>
-            Suas ações ficam registradas nos logs de auditoria (visíveis para Dono e Admin).
+            Suas ações ficam registradas nos logs de auditoria (visíveis para Administradores).
           </p>
         </div>
 
@@ -348,27 +392,41 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
           </div>
           <div
             className="card"
-            style={{ padding: "16px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}
+            style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}
           >
-            <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>A cada</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              max={50}
-              value={priorityBatchSize}
-              onChange={(e) => setPriorityBatchSize(e.target.value)}
-              style={{ width: "72px", textAlign: "center" }}
-            />
-            <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-              atendidos de prioridade <strong style={{ color: "var(--danger)" }}>alta</strong>, chamar 1
-              de prioridade <strong style={{ color: "var(--warn)" }}>normal / média</strong> antes de
-              voltar.
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "13px", color: "var(--text)" }}>Chamar</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                max={50}
+                value={highBatchSize}
+                onChange={(e) => setHighBatchSize(e.target.value)}
+                style={{ width: "72px", textAlign: "center" }}
+              />
+              <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                senhas de prioridade <strong style={{ color: "var(--danger)" }}>Alta</strong>,
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "13px", color: "var(--text)" }}>depois</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                max={50}
+                value={medBatchSize}
+                onChange={(e) => setMedBatchSize(e.target.value)}
+                style={{ width: "72px", textAlign: "center" }}
+              />
+              <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                senhas de prioridade <strong style={{ color: "var(--warn)" }}>Média</strong>, antes de alternar com 1 de prioridade <strong style={{ color: "var(--success)" }}>Baixa</strong>.
+              </span>
+            </div>
           </div>
           <p style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "8px" }}>
-            Evita que a fila normal fique indefinidamente bloqueada por chegadas contínuas de alta prioridade. Use{" "}
-            <strong>0</strong> para prioridade estrita tradicional.
+            Intercalação em cascata (Alta → Média → Baixa). Evita que senhas de menor prioridade fiquem bloqueadas indefinidamente.
           </p>
         </div>
 
@@ -780,22 +838,55 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
           </div>
         )}
 
-        <button
-          className="btn btn-primary"
-          onClick={createRoom}
-          disabled={loading}
-          style={{ width: "100%", padding: "16px", fontSize: "15px" }}
-        >
-          {loading ? (
-            <>
-              <Loader2 size={17} className="spin" /> Criando Sala...
-            </>
-          ) : (
-            <>
-              <Layers size={17} /> Criar Sala e Abrir Fila
-            </>
+        {["admin", "owner"].includes(activeOrg?.role) && (
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              marginBottom: "16px",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={saveAsPermanent}
+              onChange={(e) => setSaveAsPermanent(e.target.checked)}
+            />
+            <span style={{ fontSize: "13px", color: "var(--text)" }}>
+              Salvar como modelo permanente na instituição (para atendentes abrirem o dia sem reconfigurar)
+            </span>
+          </label>
+        )}
+
+        <div style={{ display: "flex", gap: "10px" }}>
+          {["admin", "owner"].includes(activeOrg?.role) && (
+            <button
+              className="btn btn-secondary"
+              onClick={handleSaveOnlyPermanent}
+              disabled={loading}
+              style={{ flex: 1, padding: "16px", fontSize: "14px", fontWeight: 600 }}
+            >
+              <Save size={16} /> Salvar Modelo Permanente
+            </button>
           )}
-        </button>
+          <button
+            className="btn btn-primary"
+            onClick={createRoom}
+            disabled={loading}
+            style={{ flex: 2, padding: "16px", fontSize: "15px", fontWeight: 700 }}
+          >
+            {loading ? (
+              <>
+                <Loader2 size={17} className="spin" /> Iniciando...
+              </>
+            ) : (
+              <>
+                <Layers size={17} /> Criar Sala e Iniciar Dia
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

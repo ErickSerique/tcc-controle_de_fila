@@ -38,12 +38,15 @@ import {
   fetchActiveRooms,
   fetchMyInvites,
   acceptInvite,
+  fetchSavedRooms,
+  openDayRoom,
+  fetchJoinRequests,
 } from "../lib/api";
 import socket from "../lib/socket";
 import ConfirmModal from "../components/ConfirmModal";
 import Modal from "../components/Modal";
 
-const ROLE_LABELS = { owner: "Dono", admin: "Administrador", operator: "Operador" };
+const ROLE_LABELS = { owner: "Administrador", admin: "Administrador", operator: "Operador" };
 
 const LandingScreen = ({ onNavigate }) => {
   const { user, activeOrg, orgs, switchOrg, signOut, refreshOrgs } = useAuth();
@@ -63,6 +66,11 @@ const LandingScreen = ({ onNavigate }) => {
   const [activeRooms, setActiveRooms] = useState([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
 
+  // Salas permanentes salvas (Modelos/Presets) e Solicitações de Entrada
+  const [savedRooms, setSavedRooms] = useState([]);
+  const [joinRequests, setJoinRequests] = useState([]);
+  const [openingSavedRoomId, setOpeningSavedRoomId] = useState(null);
+
   // Convites pendentes por e-mail - Priority 7
   const [pendingInvites, setPendingInvites] = useState([]);
   const [acceptingToken, setAcceptingToken] = useState(null);
@@ -70,7 +78,9 @@ const LandingScreen = ({ onNavigate }) => {
   // ── Ticket ativo do cliente (acompanhamento e recall no menu principal) (M1/M8) ──
   const [activeTicketData, setActiveTicketData] = useState(() => {
     try {
-      const saved = localStorage.getItem("fila_io_active_ticket");
+      const saved =
+        localStorage.getItem("kiwii_active_ticket") ||
+        localStorage.getItem("fila_io_active_ticket");
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -93,7 +103,7 @@ const LandingScreen = ({ onNavigate }) => {
     socket.on("connect", joinRoom);
 
     const handleQueueUpdate = ({ roomCode, queue }) => {
-      if (roomCode !== room.code) return;
+      if (roomCode?.toUpperCase() !== room.code?.toUpperCase()) return;
       const me = queue.find((t) => t.token === ticket.token);
       if (!me) return;
       setActiveTicketData((prev) => {
@@ -103,39 +113,52 @@ const LandingScreen = ({ onNavigate }) => {
           ticket: { ...prev.ticket, ...me, status: "waiting", isRecall: false },
         };
         try {
-          localStorage.setItem("fila_io_active_ticket", JSON.stringify(updated));
+          localStorage.setItem("kiwii_active_ticket", JSON.stringify(updated));
         } catch {}
         return updated;
       });
     };
 
-    const handleTicketCalled = ({ token }) => {
-      if (token !== ticket.token) return;
+    const handleTicketCalled = (data) => {
+      const t = data.token || data.ticket?.token;
+      if (t !== ticket.token) return;
       navigator.vibrate?.([200, 100, 200, 100, 400]);
       setActiveTicketData((prev) => {
         if (!prev) return null;
         const updated = {
           ...prev,
-          ticket: { ...prev.ticket, status: "called", isRecall: false },
+          ticket: {
+            ...prev.ticket,
+            status: "called",
+            isRecall: false,
+            counter: data.counter || prev.ticket.counter,
+          },
         };
         try {
-          localStorage.setItem("fila_io_active_ticket", JSON.stringify(updated));
+          localStorage.setItem("kiwii_active_ticket", JSON.stringify(updated));
         } catch {}
         return updated;
       });
     };
 
-    const handleTicketRecalled = ({ token }) => {
-      if (token !== ticket.token) return;
+    const handleTicketRecalled = (data) => {
+      const t = data.token || data.ticket?.token;
+      if (t !== ticket.token) return;
       navigator.vibrate?.([300, 150, 300, 150, 600]);
       setActiveTicketData((prev) => {
         if (!prev) return null;
         const updated = {
           ...prev,
-          ticket: { ...prev.ticket, status: "called", isRecall: true },
+          ticket: {
+            ...prev.ticket,
+            status: "called",
+            isRecall: true,
+            category: data.category || prev.ticket.category,
+            counter: data.counterName || data.counter || prev.ticket.counter,
+          },
         };
         try {
-          localStorage.setItem("fila_io_active_ticket", JSON.stringify(updated));
+          localStorage.setItem("kiwii_active_ticket", JSON.stringify(updated));
         } catch {}
         return updated;
       });
@@ -150,7 +173,7 @@ const LandingScreen = ({ onNavigate }) => {
           ticket: { ...prev.ticket, status: "served", isRecall: false },
         };
         try {
-          localStorage.setItem("fila_io_active_ticket", JSON.stringify(updated));
+          localStorage.setItem("kiwii_active_ticket", JSON.stringify(updated));
         } catch {}
         return updated;
       });
@@ -170,10 +193,12 @@ const LandingScreen = ({ onNavigate }) => {
     };
   }, [activeTicketData?.ticket?.token, activeTicketData?.room?.code]);
 
-  // Carrega salas ativas da instituição
+  // Carrega salas ativas, salas salvas e solicitações de entrada da instituição
   useEffect(() => {
     if (!activeOrg?.id) {
       setActiveRooms([]);
+      setSavedRooms([]);
+      setJoinRequests([]);
       return;
     }
     setLoadingRooms(true);
@@ -181,7 +206,29 @@ const LandingScreen = ({ onNavigate }) => {
       .then((data) => setActiveRooms(data.rooms || []))
       .catch(() => setActiveRooms([]))
       .finally(() => setLoadingRooms(false));
-  }, [activeOrg?.id]);
+
+    fetchSavedRooms(activeOrg.id)
+      .then((data) => setSavedRooms(data.savedRooms || []))
+      .catch(() => setSavedRooms([]));
+
+    if (["admin", "owner"].includes(activeOrg.role)) {
+      fetchJoinRequests(activeOrg.id)
+        .then((data) => setJoinRequests(data.requests || []))
+        .catch(() => setJoinRequests([]));
+    }
+  }, [activeOrg?.id, activeOrg?.role]);
+
+  const handleOpenSavedRoom = async (savedRoom) => {
+    setOpeningSavedRoomId(savedRoom.id);
+    try {
+      const room = await openDayRoom(activeOrg.id, { savedRoomId: savedRoom.id });
+      onNavigate("host-panel", { roomCode: room.code });
+    } catch (err) {
+      alert(`Erro ao abrir sala: ${err.message}`);
+    } finally {
+      setOpeningSavedRoomId(null);
+    }
+  };
 
   // Carrega convites pendentes do usuário logado
   useEffect(() => {
@@ -254,6 +301,7 @@ const LandingScreen = ({ onNavigate }) => {
 
   const dismissActiveTicket = () => {
     try {
+      localStorage.removeItem("kiwii_active_ticket");
       localStorage.removeItem("fila_io_active_ticket");
     } catch {}
     setActiveTicketData(null);
@@ -702,7 +750,7 @@ const LandingScreen = ({ onNavigate }) => {
               </button>
             )}
 
-            {/* Gerenciar Membros */}
+            {/* Gerenciar Membros (Com indicador de solicitações pendentes) */}
             {user && activeOrg && ["owner", "admin"].includes(activeOrg.role) && (
               <button
                 onClick={() => onNavigate("members")}
@@ -720,11 +768,28 @@ const LandingScreen = ({ onNavigate }) => {
                 <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
                   <Users size={20} color="var(--primary)" />
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--text)" }}>
-                      Membros da Equipe
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--text)" }}>
+                        Membros da Equipe
+                      </span>
+                      {joinRequests.length > 0 && (
+                        <span
+                          className="tag"
+                          style={{
+                            background: "var(--primary)",
+                            color: "#fff",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: "12px",
+                          }}
+                        >
+                          {joinRequests.length} pendente{joinRequests.length > 1 ? "s" : ""}
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Convide funcionários e defina cargos de guichê
+                      Convites com link temporário e aprovação de equipe
                     </div>
                   </div>
                 </div>
@@ -761,6 +826,67 @@ const LandingScreen = ({ onNavigate }) => {
                 <ChevronRight size={16} color="var(--text-dim)" />
               </button>
             )}
+          </div>
+        )}
+
+        {/* ── Salas Permanentes Cadastradas (Iniciar Dia - Prioridade 7) ── */}
+        {user && activeOrg && savedRooms.length > 0 && (
+          <div className="card" style={{ padding: "20px", textAlign: "left", marginBottom: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <div>
+                <h3 style={{ fontSize: "15px", fontWeight: 700, margin: 0, color: "var(--text)" }}>
+                  Salas Cadastradas (Iniciar Dia)
+                </h3>
+                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Abra a fila do dia com 1 clique sem precisar reconfigurar
+                </p>
+              </div>
+              {["admin", "owner"].includes(activeOrg.role) && (
+                <button
+                  onClick={() => onNavigate("host-setup")}
+                  className="btn btn-secondary btn-sm"
+                  style={{ gap: "4px", fontSize: "12px" }}
+                >
+                  <Plus size={14} /> Nova Sala
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {savedRooms.map((sr) => (
+                <div
+                  key={sr.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 14px",
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--text)" }}>
+                      {sr.name}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      {sr.desk_count || 1} guichê(s) · {sr.categories?.length || 0} categoria(s)
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      onClick={() => handleOpenSavedRoom(sr)}
+                      disabled={openingSavedRoomId === sr.id}
+                      className="btn btn-primary btn-sm"
+                      style={{ fontWeight: 700 }}
+                    >
+                      {openingSavedRoomId === sr.id ? "Abrindo..." : "Iniciar Dia"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -851,7 +977,7 @@ const LandingScreen = ({ onNavigate }) => {
           </button>
         </div>
 
-        {activeOrg?.role === "owner" && (
+        {["admin", "owner"].includes(activeOrg?.role) && (
           <div style={{ borderTop: "1px solid var(--border)", marginTop: "20px", paddingTop: "14px" }}>
             <button
               className="btn btn-danger"

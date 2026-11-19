@@ -1,10 +1,8 @@
 /**
  * routes/orgs.js
  *
- * REST API para gerenciamento de organizations, membros e convites.
- *
- * Todas as rotas requerem autenticação Supabase.
- * Rotas de modificação requerem role mínimo indicado.
+ * REST API para gerenciamento de organizações, membros,
+ * convites temporários, fila de aprovação e salas salvas.
  */
 const express = require("express");
 const { body, param, validationResult } = require("express-validator");
@@ -20,7 +18,8 @@ const validate = (req, res, next) => {
   next();
 };
 
-// ── POST /api/orgs — Criar organização ───────────────────────────
+// ── Organizações ──────────────────────────────────────────────────
+
 router.post(
   "/",
   requireAuth,
@@ -37,7 +36,6 @@ router.post(
   }
 );
 
-// ── GET /api/orgs — Minhas organizações ──────────────────────────
 router.get("/", requireAuth, async (req, res) => {
   try {
     const orgs = await orgService.listUserOrgs(req.user.id);
@@ -47,60 +45,16 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-// ── GET /api/orgs/:orgId — Detalhes da org ───────────────────────
-router.get(
-  "/:orgId",
-  requireAuth,
-  requireRole("operator"),
-  async (req, res) => {
-    try {
-      const org = await orgService.getOrg(req.params.orgId);
-      if (!org) return res.status(404).json({ error: "Organização não encontrada." });
-      res.json({ org });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+router.get("/:orgId", requireAuth, requireRole("operator"), async (req, res) => {
+  try {
+    const org = await orgService.getOrg(req.params.orgId);
+    if (!org) return res.status(404).json({ error: "Organização não encontrada." });
+    res.json({ org });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-);
+});
 
-// ── GET /api/orgs/:orgId/queue-template — Obter modelo persistente de fila (M2) ─
-router.get(
-  "/:orgId/queue-template",
-  requireAuth,
-  requireRole("operator"),
-  async (req, res) => {
-    try {
-      const categories = await orgService.getQueueTemplate(req.params.orgId);
-      res.json({ categories });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  }
-);
-
-// ── PUT /api/orgs/:orgId/queue-template — Salvar modelo persistente de fila (M2) ─
-router.put(
-  "/:orgId/queue-template",
-  requireAuth,
-  requireRole("operator"),
-  [
-    body("categories").isArray({ min: 1, max: 20 }),
-    body("categories.*.name").trim().isLength({ min: 1, max: 50 }).escape(),
-    body("categories.*.priority").isInt({ min: 1, max: 3 }),
-    body("categories.*.tma").isInt({ min: 1, max: 120 }),
-  ],
-  validate,
-  async (req, res) => {
-    try {
-      const categories = await orgService.saveQueueTemplate(req.params.orgId, req.body.categories);
-      res.json({ categories });
-    } catch (err) {
-      res.status(400).json({ error: err.message });
-    }
-  }
-);
-
-// ── PATCH /api/orgs/:orgId — Atualizar org ───────────────────────
 router.patch(
   "/:orgId",
   requireAuth,
@@ -121,50 +75,38 @@ router.patch(
   }
 );
 
-// ── DELETE /api/orgs/:orgId — Excluir org ────────────────────────
-router.delete(
-  "/:orgId",
-  requireAuth,
-  requireRole("owner"),
-  async (req, res) => {
-    try {
-      await orgService.deleteOrg(req.params.orgId);
-      res.json({ success: true });
-    } catch (err) {
-      res.status(400).json({ error: err.message });
-    }
+router.delete("/:orgId", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    await orgService.deleteOrg(req.params.orgId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
-);
+});
 
-// ── GET /api/orgs/:orgId/members — Listar membros ────────────────
-router.get(
-  "/:orgId/members",
-  requireAuth,
-  requireRole("operator"),
-  async (req, res) => {
-    try {
-      const members = await orgService.listMembers(req.params.orgId);
-      res.json({ members });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+// ── Membros ───────────────────────────────────────────────────────
+
+router.get("/:orgId/members", requireAuth, requireRole("operator"), async (req, res) => {
+  try {
+    const members = await orgService.listMembers(req.params.orgId);
+    res.json({ members });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-);
+});
 
-// ── PATCH /api/orgs/:orgId/members/:userId — Alterar role ────────
 router.patch(
   "/:orgId/members/:userId",
   requireAuth,
   requireRole("admin"),
-  [body("role").isIn(["operator", "admin", "owner"])],
+  [body("role").isIn(["operator", "admin"])],
   validate,
   async (req, res) => {
     try {
       const member = await orgService.updateMemberRole(
         req.params.orgId,
         req.params.userId,
-        req.body.role,
-        req.orgRole
+        req.body.role
       );
       res.json({ member });
     } catch (err) {
@@ -173,84 +115,170 @@ router.patch(
   }
 );
 
-// ── DELETE /api/orgs/:orgId/members/:userId — Remover membro ─────
-router.delete(
-  "/:orgId/members/:userId",
+router.delete("/:orgId/members/:userId", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    await orgService.removeMember(req.params.orgId, req.params.userId, req.user.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── Convites Temporários & Fila de Aprovação ──────────────────────
+
+// Gerar link temporário (Admin)
+router.post("/:orgId/temp-invite-link", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const minutes = parseInt(req.body.expiresInMinutes, 10) || 30;
+    const invite = await orgService.createTemporaryInviteLink(req.params.orgId, req.user.id, minutes);
+    res.status(201).json(invite);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Prévia pública do convite (qualquer um)
+router.get("/invites/:token", async (req, res) => {
+  try {
+    const info = await orgService.getInviteInfo(req.params.token);
+    res.json(info);
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+// Usuário solicita entrada na equipe via link temporário
+router.post("/invites/:token/request-join", requireAuth, async (req, res) => {
+  try {
+    const userName = req.profile?.name || req.user.user_metadata?.full_name || req.user.email.split("@")[0];
+    const result = await orgService.requestJoinOrg({
+      token: req.params.token,
+      userId: req.user.id,
+      userName,
+      userEmail: req.user.email,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Listar solicitações pendentes (Admin)
+router.get("/:orgId/join-requests", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const requests = await orgService.listJoinRequests(req.params.orgId);
+    res.json({ requests });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Aprovar solicitação (Admin)
+router.post(
+  "/:orgId/join-requests/:requestId/approve",
   requireAuth,
   requireRole("admin"),
   async (req, res) => {
     try {
-      await orgService.removeMember(
+      const assignedRole = req.body.role === "admin" ? "admin" : "operator";
+      const result = await orgService.approveJoinRequest(
         req.params.orgId,
-        req.params.userId,
-        req.user.id,
-        req.orgRole
+        req.params.requestId,
+        assignedRole,
+        req.user.id
       );
-      res.json({ success: true });
+      res.json(result);
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
   }
 );
 
-// ── POST /api/orgs/:orgId/invites — Convidar membro ──────────────
+// Recusar solicitação (Admin)
 router.post(
-  "/:orgId/invites",
+  "/:orgId/join-requests/:requestId/reject",
   requireAuth,
   requireRole("admin"),
-  [
-    body("email")
-      .isEmail()
-      .normalizeEmail({
-        gmail_remove_dots: false,
-        gmail_remove_subaddress: false,
-        gmail_convert_googlemaildotcom: false,
-      }),
-    body("role").isIn(["operator", "admin"]),
-  ],
-  validate,
   async (req, res) => {
     try {
-      const invite = await orgService.inviteMember(req.params.orgId, {
-        email: req.body.email,
-        role: req.body.role,
-        invitedByUserId: req.user.id,
-      });
-      res.status(201).json({ invite });
+      const result = await orgService.rejectJoinRequest(
+        req.params.orgId,
+        req.params.requestId,
+        req.user.id
+      );
+      res.json(result);
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
   }
 );
 
-// ── GET /api/orgs/invites/:token — Prévia pública do convite ─────
-router.get(
-  "/invites/:token",
-  [param("token").trim().isLength({ min: 10 })],
-  validate,
-  async (req, res) => {
-    try {
-      res.json(await orgService.getInviteInfo(req.params.token));
-    } catch (err) {
-      res.status(404).json({ error: err.message });
-    }
+// Compatibilidade legada para rota POST /:orgId/invites
+router.post("/:orgId/invites", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const invite = await orgService.createTemporaryInviteLink(req.params.orgId, req.user.id, 60);
+    res.status(201).json({ invite });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
-);
+});
 
-// ── POST /api/orgs/invites/accept — Aceitar convite ──────────────
-router.post(
-  "/invites/accept",
-  requireAuth,
-  [body("token").trim().isLength({ min: 10 })],
-  validate,
-  async (req, res) => {
-    try {
-      const invite = await orgService.acceptInvite(req.body.token, req.user.id, req.user.email);
-      res.json({ invite });
-    } catch (err) {
-      res.status(400).json({ error: err.message });
-    }
+// ── Salas Salvas (Permanentes) ────────────────────────────────────
+
+router.get("/:orgId/saved-rooms", requireAuth, requireRole("operator"), async (req, res) => {
+  try {
+    const rooms = await orgService.listSavedRooms(req.params.orgId);
+    res.json({ rooms });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-);
+});
+
+router.post("/:orgId/saved-rooms", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const savedRoom = await orgService.createSavedRoom(req.params.orgId, req.body);
+    res.status(201).json({ room: savedRoom });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put("/:orgId/saved-rooms/:id", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const updated = await orgService.updateSavedRoom(req.params.orgId, req.params.id, req.body);
+    res.json({ room: updated });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/:orgId/saved-rooms/:id", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    await orgService.deleteSavedRoom(req.params.orgId, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── Template de Fila (M2) ────────────────────────────────────────
+
+router.get("/:orgId/queue-template", requireAuth, requireRole("operator"), async (req, res) => {
+  try {
+    const categories = await orgService.getQueueTemplate(req.params.orgId);
+    res.json({ categories });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/:orgId/queue-template", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const categories = await orgService.saveQueueTemplate(req.params.orgId, req.body.categories);
+    res.json({ categories });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
 module.exports = router;

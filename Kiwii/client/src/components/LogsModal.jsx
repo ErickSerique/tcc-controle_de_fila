@@ -13,11 +13,11 @@ const ACTION_INFO = {
   "ticket.readmitted_queue": { Icon: RotateCcw,  label: "Readmitiu na fila" },
 };
 
-const ROLE_LABELS = { owner: "Owner", admin: "Admin", operator: "Operador", client: "Cliente" };
+const ROLE_LABELS = { owner: "Administrador", admin: "Administrador", operator: "Operador", client: "Cliente" };
 
 /**
  * LogsModal — trilha de auditoria da sala (quem fez o quê e quando).
- * Visível apenas para Owner/Admin — controlado por QueueManagementScreen.
+ * Visível apenas para Admin — controlado por QueueManagementScreen.
  */
 const LogsModal = ({ open, onClose, logs }) => {
   return (
@@ -26,7 +26,7 @@ const LogsModal = ({ open, onClose, logs }) => {
         <ScrollText size={17} /> Logs de Auditoria
       </h3>
       <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "20px" }}>
-        Visível apenas para Owner e Admin · {logs.length} registro{logs.length !== 1 ? "s" : ""}
+        Visível apenas para Administradores · {logs.length} registro{logs.length !== 1 ? "s" : ""}
       </p>
 
       {logs.length === 0 ? (

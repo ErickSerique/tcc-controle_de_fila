@@ -40,7 +40,7 @@ import RecallModal from "../components/RecallModal";
 import LogsModal from "../components/LogsModal";
 import HistoryModal from "../components/HistoryModal";
 import CustomFieldInput, { validateCustomFields } from "../components/CustomFieldInput";
-import { exportToCSV, exportToJSON } from "../lib/export";
+import { exportToCSV, exportToExcel, exportToPDF, exportToJSON } from "../lib/export";
 
 const PRIORITY_OPTIONS = [
   { value: 3, label: "Alta", color: "var(--danger)" },
@@ -228,13 +228,19 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
     setError("");
   };
 
-  const handleRecall = (token, mode) => {
-    if (mode === "counter" && counters.length > 1 && !myCounter) {
+  const handleRecall = (token, mode, counter, category) => {
+    if (mode === "counter" && counters.length > 1 && !myCounter && !counter) {
       setCounterModalOpen(true);
       setError("Escolha um guichê antes de chamar.");
       return;
     }
-    socket.emit("host:recall", { roomCode, token, mode });
+    socket.emit("host:recall", {
+      roomCode,
+      token,
+      mode,
+      counter: counter || myCounter?.name,
+      category,
+    });
   };
 
   const fetchLogs = async () => {
@@ -333,7 +339,7 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
                 borderColor: "var(--border)",
               }}
             >
-              {staff.name} · {staff.role === "owner" ? "Dono" : staff.role === "admin" ? "Admin" : "Operador"}
+              {staff.name} · {staff.role === "admin" || staff.role === "owner" ? "Admin" : "Operador"}
             </span>
 
             {/* Guichê Indicador / Seletor (Alta 5) */}
@@ -1159,12 +1165,13 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
         )}
       </Modal>
 
-      {/* ── Modal de Rechamada (Média 1) ── */}
+      {/* ── Modal de Rechamada (Média 1 & Prioridade 5) ── */}
       <RecallModal
         open={!!recallTarget}
         onClose={() => setRecallTarget(null)}
         ticket={recallTarget}
         counters={counters}
+        categories={currentRoom?.categories || []}
         myCounterName={myCounter?.name}
         onRecall={handleRecall}
       />
@@ -1238,20 +1245,34 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
                 </div>
               ))}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
               <button
                 className="btn"
                 onClick={() => exportToCSV(report)}
-                style={{ padding: "14px", fontWeight: 700 }}
+                style={{ padding: "12px", fontWeight: 700, fontSize: "13px" }}
               >
-                <Download size={16} /> Baixar como .CSV
+                <Download size={14} /> Baixar CSV
+              </button>
+              <button
+                className="btn"
+                onClick={() => exportToExcel(report)}
+                style={{ padding: "12px", fontWeight: 700, fontSize: "13px" }}
+              >
+                <Download size={14} /> Baixar Excel (.xls)
+              </button>
+              <button
+                className="btn"
+                onClick={() => exportToPDF(report)}
+                style={{ padding: "12px", fontWeight: 700, fontSize: "13px" }}
+              >
+                <Download size={14} /> Imprimir / PDF
               </button>
               <button
                 className="btn"
                 onClick={() => exportToJSON(report)}
-                style={{ padding: "14px", fontWeight: 700 }}
+                style={{ padding: "12px", fontWeight: 700, fontSize: "13px" }}
               >
-                <Download size={16} /> Baixar como .JSON
+                <Download size={14} /> Baixar JSON
               </button>
             </div>
             <button

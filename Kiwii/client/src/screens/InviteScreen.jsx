@@ -1,17 +1,19 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, CheckCircle2, AlertTriangle, Building, Loader2, LogIn } from "lucide-react";
-import { fetchInviteInfo, acceptInvite } from "../lib/api";
+import { ArrowLeft, CheckCircle2, AlertTriangle, Building, Loader2, LogIn, Clock } from "lucide-react";
+import { fetchInviteInfo, acceptInvite, requestJoinOrg } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
-const ROLE_LABELS = { owner: "Dono", admin: "Administrador", operator: "Operador" };
+const ROLE_LABELS = { owner: "Administrador", admin: "Administrador", operator: "Operador" };
 
 export default function InviteScreen({ token, onAccepted, onRequireLogin }) {
   const { user, refreshOrgs } = useAuth();
   const [invite, setInvite] = useState(null);
+  const [applicantName, setApplicantName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [accepting, setAccepting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -19,6 +21,7 @@ export default function InviteScreen({ token, onAccepted, onRequireLogin }) {
       .then((data) => {
         if (isMounted) {
           setInvite(data);
+          if (user?.profile?.name) setApplicantName(user.profile.name);
           setLoading(false);
         }
       })
@@ -31,23 +34,30 @@ export default function InviteScreen({ token, onAccepted, onRequireLogin }) {
     return () => {
       isMounted = false;
     };
-  }, [token]);
+  }, [token, user]);
 
-  const handleAccept = async () => {
+  const handleAction = async () => {
     if (!user) {
       onRequireLogin();
       return;
     }
-    setAccepting(true);
+    setSubmitting(true);
     setError("");
+
     try {
-      await acceptInvite(token);
-      await refreshOrgs();
-      setSuccess(true);
-      setTimeout(() => onAccepted(), 1200);
+      if (invite?.isTemporary) {
+        await requestJoinOrg(token, applicantName || user?.profile?.name || user?.email);
+        setPendingApproval(true);
+      } else {
+        await acceptInvite(token);
+        await refreshOrgs();
+        setSuccess(true);
+        setTimeout(() => onAccepted(), 1200);
+      }
     } catch (err) {
       setError(err.message);
-      setAccepting(false);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -81,7 +91,7 @@ export default function InviteScreen({ token, onAccepted, onRequireLogin }) {
         </div>
 
         <h2 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "8px", color: "var(--text)" }}>
-          Convite para Instituição
+          {invite?.isTemporary ? "Entrar na Equipe" : "Convite para Instituição"}
         </h2>
 
         {loading ? (
@@ -112,6 +122,33 @@ export default function InviteScreen({ token, onAccepted, onRequireLogin }) {
               Voltar ao Início
             </button>
           </div>
+        ) : pendingApproval ? (
+          <div style={{ marginTop: "16px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                color: "var(--primary)",
+                fontSize: "14px",
+                marginBottom: "16px",
+                padding: "14px",
+                background: "var(--primary-glow)",
+                borderRadius: "8px",
+                border: "1px solid var(--primary)",
+                textAlign: "left",
+              }}
+            >
+              <Clock size={20} style={{ flexShrink: 0 }} />
+              <div>
+                <strong style={{ display: "block", marginBottom: "4px" }}>Solicitação Enviada!</strong>
+                Você entrou na fila de aprovação da instituição <strong>{invite?.org_name}</strong>. Assim que o administrador aprovar sua entrada, você terá acesso à equipe.
+              </div>
+            </div>
+            <button className="btn btn-primary" onClick={() => (window.location.href = "/")} style={{ width: "100%", padding: "12px" }}>
+              Ir para o Início
+            </button>
+          </div>
         ) : success ? (
           <div style={{ marginTop: "16px" }}>
             <div
@@ -134,16 +171,23 @@ export default function InviteScreen({ token, onAccepted, onRequireLogin }) {
           </div>
         ) : (
           <div style={{ marginTop: "16px" }}>
-            <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.6, marginBottom: "20px" }}>
-              Você foi convidado para fazer parte da instituição{" "}
-              <strong style={{ color: "var(--text)" }}>{invite.org_name}</strong> com o cargo de{" "}
-              <strong style={{ color: "var(--primary)" }}>{ROLE_LABELS[invite.role] || invite.role}</strong>.
-            </p>
+            {invite?.isTemporary ? (
+              <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.6, marginBottom: "20px" }}>
+                Você está acessando um link de convite temporário para a instituição{" "}
+                <strong style={{ color: "var(--text)" }}>{invite.org_name}</strong>.
+              </p>
+            ) : (
+              <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.6, marginBottom: "20px" }}>
+                Você foi convidado para fazer parte da instituição{" "}
+                <strong style={{ color: "var(--text)" }}>{invite.org_name}</strong> com o cargo de{" "}
+                <strong style={{ color: "var(--primary)" }}>{ROLE_LABELS[invite.role] || invite.role}</strong>.
+              </p>
+            )}
 
             {!user ? (
               <div>
                 <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "16px" }}>
-                  Você precisa entrar com a sua conta ({invite.email}) para aceitar o convite.
+                  Você precisa entrar ou criar uma conta para solicitar entrada.
                 </p>
                 <button
                   className="btn btn-primary"
@@ -154,14 +198,33 @@ export default function InviteScreen({ token, onAccepted, onRequireLogin }) {
                 </button>
               </div>
             ) : (
-              <button
-                className="btn btn-primary"
-                onClick={handleAccept}
-                disabled={accepting}
-                style={{ width: "100%", padding: "14px", fontSize: "14px", fontWeight: 700 }}
-              >
-                {accepting ? "Aceitando convite..." : "Aceitar Convite e Entrar"}
-              </button>
+              <div>
+                {invite?.isTemporary && (
+                  <div style={{ marginBottom: "16px", textAlign: "left" }}>
+                    <label className="mono" style={{ fontSize: "11px", color: "var(--text-secondary)", display: "block", marginBottom: "6px", textTransform: "uppercase" }}>
+                      Seu Nome Completo
+                    </label>
+                    <input
+                      className="input"
+                      placeholder="Ex: Carlos Silva"
+                      value={applicantName}
+                      onChange={(e) => setApplicantName(e.target.value)}
+                    />
+                  </div>
+                )}
+                <button
+                  className="btn btn-primary"
+                  onClick={handleAction}
+                  disabled={submitting}
+                  style={{ width: "100%", padding: "14px", fontSize: "14px", fontWeight: 700 }}
+                >
+                  {submitting
+                    ? "Enviando solicitação..."
+                    : invite?.isTemporary
+                    ? "Solicitar Entrada na Equipe"
+                    : "Aceitar Convite e Entrar"}
+                </button>
+              </div>
             )}
           </div>
         )}

@@ -2,7 +2,7 @@
  * screens/MembersScreen.jsx
  *
  * Kiwii Design System v3.0 — Gerenciamento de Membros e Convites
- * Suporta RBAC estrito (Dono/Admin/Operador) e link direto de convite com fallback a SMTP.
+ * Suporta RBAC estrito (Admin/Operador) e link temporário de convite com fila de entrada.
  */
 import { useState, useEffect } from "react";
 import {
@@ -11,73 +11,117 @@ import {
   CheckCircle2,
   Copy,
   Check,
-  Mail,
   Shield,
   Trash2,
   UserPlus,
+  UserCheck,
+  XCircle,
+  Clock,
+  Link,
+  Users,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { fetchOrgMembers, inviteMember, updateMemberRole, removeMember } from "../lib/api";
+import {
+  fetchOrgMembers,
+  generateTempInviteLink,
+  fetchJoinRequests,
+  approveJoinRequest,
+  rejectJoinRequest,
+  updateMemberRole,
+  removeMember,
+} from "../lib/api";
 import ConfirmModal from "../components/ConfirmModal";
 
-const ROLE_LABELS = { owner: "Dono", admin: "Administrador", operator: "Operador" };
-const ROLE_COLORS = { owner: "var(--accent)", admin: "var(--warn)", operator: "var(--text-muted)" };
+const ROLE_LABELS = { owner: "Administrador", admin: "Administrador", operator: "Operador" };
+const ROLE_COLORS = { owner: "var(--primary)", admin: "var(--primary)", operator: "var(--text-muted)" };
 
 const MembersScreen = ({ onBack }) => {
   const { activeOrg, user } = useAuth();
   const [members, setMembers] = useState([]);
+  const [joinRequests, setJoinRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("operator");
-  const [inviting, setInviting] = useState(false);
-  const [inviteResult, setInviteResult] = useState(null); // { link, emailSent, emailError }
+  // Convite temporário
+  const [tempLink, setTempLink] = useState(null);
+  const [generatingLink, setGeneratingLink] = useState(false);
   const [copied, setCopied] = useState(false);
+
   const [error, setError] = useState("");
+  const [actionSuccess, setActionSuccess] = useState("");
   const [removeTarget, setRemoveTarget] = useState(null);
+  const [processingRequestId, setProcessingRequestId] = useState(null);
 
-  const isOwner = activeOrg?.role === "owner";
-  const canManage = isOwner || activeOrg?.role === "admin";
+  const isAdmin = ["admin", "owner"].includes(activeOrg?.role);
 
-  useEffect(() => {
+  const loadData = async () => {
     if (!activeOrg) return;
-    fetchOrgMembers(activeOrg.id)
-      .then((data) => setMembers(data.members || []))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [activeOrg]);
-
-  const handleInvite = async (e) => {
-    e?.preventDefault();
-    if (!inviteEmail.trim()) return;
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(inviteEmail)) {
-      setError("Por favor, informe um e-mail válido.");
-      return;
-    }
-
-    setInviting(true);
-    setError("");
-    setInviteResult(null);
-    setCopied(false);
-
     try {
-      const data = await inviteMember(activeOrg.id, inviteEmail, inviteRole);
-      setInviteResult(data.invite || data);
-      setInviteEmail("");
+      const membersData = await fetchOrgMembers(activeOrg.id);
+      setMembers(membersData.members || []);
+
+      if (isAdmin) {
+        const requestsData = await fetchJoinRequests(activeOrg.id);
+        setJoinRequests(requestsData.requests || []);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
-      setInviting(false);
+      setLoading(false);
     }
   };
 
-  const copyInviteLink = () => {
-    if (!inviteResult?.link) return;
-    navigator.clipboard.writeText(inviteResult.link);
+  useEffect(() => {
+    loadData();
+  }, [activeOrg]);
+
+  const handleGenerateTempLink = async (durationMinutes = 30) => {
+    setGeneratingLink(true);
+    setError("");
+    setActionSuccess("");
+    try {
+      const res = await generateTempInviteLink(activeOrg.id, durationMinutes);
+      setTempLink(res.link);
+      setCopied(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGeneratingLink(false);
+    }
+  };
+
+  const copyTempLink = () => {
+    if (!tempLink) return;
+    navigator.clipboard.writeText(tempLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
+  };
+
+  const handleApprove = async (requestId, role) => {
+    setProcessingRequestId(requestId);
+    setError("");
+    try {
+      await approveJoinRequest(activeOrg.id, requestId, role);
+      setActionSuccess(`Membro aprovado como ${ROLE_LABELS[role]}!`);
+      setTimeout(() => setActionSuccess(""), 4000);
+      await loadData();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
+  const handleReject = async (requestId) => {
+    setProcessingRequestId(requestId);
+    setError("");
+    try {
+      await rejectJoinRequest(activeOrg.id, requestId);
+      setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProcessingRequestId(null);
+    }
   };
 
   const handleRoleChange = async (targetUserId, newRole) => {
@@ -126,7 +170,7 @@ const MembersScreen = ({ onBack }) => {
           >
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span className="display" style={{ fontSize: "18px", fontWeight: 800 }}>
-                Kiwi<span style={{ color: "var(--accent)" }}>i</span>
+                Kiwi<span style={{ color: "var(--primary)" }}>i</span>
               </span>
               <span className="tag">{activeOrg?.name || "Organização"}</span>
             </div>
@@ -135,8 +179,8 @@ const MembersScreen = ({ onBack }) => {
             </button>
           </div>
           <h1 style={{ fontSize: "1.5rem" }}>Membros da Equipe</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: "13px", marginTop: "4px" }}>
-            Gerencie o acesso à instituição e atribua funções a novos colaboradores.
+          <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "4px" }}>
+            Gere links temporários e aprove colaboradores na fila de entrada.
           </p>
         </div>
 
@@ -147,7 +191,7 @@ const MembersScreen = ({ onBack }) => {
               alignItems: "center",
               gap: "8px",
               background: "var(--danger-glow)",
-              border: "1px solid var(--danger-glow)",
+              border: "1px solid var(--danger)",
               borderRadius: "8px",
               padding: "12px 16px",
               color: "var(--danger)",
@@ -159,52 +203,48 @@ const MembersScreen = ({ onBack }) => {
           </div>
         )}
 
-        {/* Formulário de convite (Alta 3 & Alta 4) */}
-        {canManage && (
-          <div className="card" style={{ padding: "20px", marginBottom: "28px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
-              <UserPlus size={16} color="var(--accent)" />
-              <div style={{ fontWeight: 700, fontSize: "14px" }}>Convidar Novo Membro</div>
+        {actionSuccess && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              background: "var(--primary-glow)",
+              border: "1px solid var(--primary)",
+              borderRadius: "8px",
+              padding: "12px 16px",
+              color: "var(--primary)",
+              fontSize: "13px",
+              marginBottom: "20px",
+            }}
+          >
+            <CheckCircle2 size={15} style={{ flexShrink: 0 }} /> {actionSuccess}
+          </div>
+        )}
+
+        {/* Gerador de Link Temporário (Prioridade 12) */}
+        {isAdmin && (
+          <div className="card" style={{ padding: "20px", marginBottom: "24px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <Link size={16} color="var(--primary)" />
+              <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text)" }}>
+                Convidar Colaborador com Link Temporário
+              </div>
             </div>
+            <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "16px" }}>
+              Gere um link temporário (válido por 30 minutos). O colaborador acessa o link e solicita entrada; você aprova aqui o cargo dele.
+            </p>
 
-            <form
-              onSubmit={handleInvite}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 140px auto",
-                gap: "10px",
-                alignItems: "center",
-              }}
+            <button
+              onClick={() => handleGenerateTempLink(30)}
+              disabled={generatingLink}
+              className="btn btn-primary"
+              style={{ padding: "10px 18px", fontWeight: 700, fontSize: "13px" }}
             >
-              <input
-                className="input"
-                type="email"
-                placeholder="colaborador@email.com"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                required
-              />
-              <select
-                className="input"
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-              >
-                <option value="operator">Operador</option>
-                <option value="admin">Administrador</option>
-                {isOwner && <option value="owner">Dono</option>}
-              </select>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={inviting}
-                style={{ padding: "10px 18px", whiteSpace: "nowrap" }}
-              >
-                {inviting ? "Enviando..." : "Convidar"}
-              </button>
-            </form>
+              {generatingLink ? "Gerando..." : "Gerar Link de Convite Temporário (30 min)"}
+            </button>
 
-            {/* Resultado do Convite: Link direto ou e-mail (Alta 3) */}
-            {inviteResult && (
+            {tempLink && (
               <div
                 style={{
                   marginTop: "16px",
@@ -214,55 +254,122 @@ const MembersScreen = ({ onBack }) => {
                   border: "1px solid var(--border)",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    color: inviteResult.emailSent ? "var(--success)" : "var(--warn)",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    marginBottom: "8px",
-                  }}
-                >
-                  <CheckCircle2 size={16} />
-                  {inviteResult.emailSent
-                    ? "Convite enviado por e-mail com sucesso!"
-                    : "Convite criado! Copie o link direto abaixo para enviar ao colaborador:"}
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>
+                  Link gerado! Compartilhe com quem vai ingressar na equipe:
                 </div>
-
-                {inviteResult.link && (
-                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                    <input
-                      className="input mono"
-                      readOnly
-                      value={inviteResult.link}
-                      style={{ fontSize: "12px", background: "var(--bg)", color: "var(--text-muted)" }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={copyInviteLink}
-                      style={{ padding: "8px 14px", whiteSpace: "nowrap", gap: "6px" }}
-                    >
-                      {copied ? (
-                        <>
-                          <Check size={14} color="var(--success)" /> Copiado
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={14} /> Copiar Link
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input
+                    className="input mono"
+                    readOnly
+                    value={tempLink}
+                    style={{ fontSize: "12px", background: "var(--bg)", color: "var(--text)" }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={copyTempLink}
+                    style={{ padding: "8px 14px", whiteSpace: "nowrap", gap: "6px", fontWeight: 600 }}
+                  >
+                    {copied ? (
+                      <>
+                        <Check size={14} color="var(--primary)" /> Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={14} /> Copiar Link
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Lista de membros */}
+        {/* Fila de Entrada / Solicitações Pendentes (Prioridade 12) */}
+        {isAdmin && joinRequests.length > 0 && (
+          <div
+            className="card"
+            style={{
+              padding: "20px",
+              marginBottom: "28px",
+              border: "1.5px solid var(--primary)",
+              background: "var(--primary-glow)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+              <Clock size={16} color="var(--primary)" />
+              <div style={{ fontWeight: 700, fontSize: "15px", color: "var(--text)" }}>
+                Fila de Entrada — Solicitações Pendentes ({joinRequests.length})
+              </div>
+            </div>
+            <p style={{ color: "var(--text-secondary)", fontSize: "12px", marginBottom: "16px" }}>
+              Colaboradores que acessaram o link temporário e aguardam aprovação:
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {joinRequests.map((req) => (
+                <div
+                  key={req.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 14px",
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    flexWrap: "wrap",
+                    gap: "10px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text)" }}>
+                      {req.user_name || req.user_email || "Usuário"}
+                    </div>
+                    {req.user_email && req.user_name && (
+                      <div className="mono" style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                        {req.user_email}
+                      </div>
+                    )}
+                    <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "2px" }}>
+                      Solicitado em {new Date(req.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => handleApprove(req.id, "operator")}
+                      disabled={processingRequestId === req.id}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontWeight: 600, fontSize: "12px" }}
+                    >
+                      Aprovar como Operador
+                    </button>
+                    <button
+                      onClick={() => handleApprove(req.id, "admin")}
+                      disabled={processingRequestId === req.id}
+                      className="btn btn-primary btn-sm"
+                      style={{ fontWeight: 700, fontSize: "12px" }}
+                    >
+                      Aprovar como Admin
+                    </button>
+                    <button
+                      onClick={() => handleReject(req.id)}
+                      disabled={processingRequestId === req.id}
+                      className="btn btn-sm"
+                      style={{ color: "var(--danger)", border: "1px solid var(--danger)", background: "transparent", fontSize: "12px" }}
+                    >
+                      Recusar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Lista de Membros Ativos */}
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <div
             style={{
@@ -276,7 +383,7 @@ const MembersScreen = ({ onBack }) => {
               className="mono"
               style={{
                 fontSize: "11px",
-                color: "var(--text-muted)",
+                color: "var(--text-secondary)",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
               }}
@@ -286,21 +393,17 @@ const MembersScreen = ({ onBack }) => {
           </div>
 
           {loading ? (
-            <div className="card" style={{ padding: "24px", textAlign: "center", color: "var(--text-muted)" }}>
+            <div className="card" style={{ padding: "24px", textAlign: "center", color: "var(--text-secondary)" }}>
               Carregando membros...
             </div>
           ) : members.length === 0 ? (
-            <div className="card" style={{ padding: "24px", textAlign: "center", color: "var(--text-muted)" }}>
+            <div className="card" style={{ padding: "24px", textAlign: "center", color: "var(--text-secondary)" }}>
               Nenhum membro encontrado.
             </div>
           ) : (
             members.map((m) => {
               const isSelf = m.user_id === user?.id;
-              // RBAC: Dono edita todos exceto a si mesmo; Admin só edita Operador.
-              const canEditThisMember =
-                canManage &&
-                !isSelf &&
-                (isOwner || (activeOrg?.role === "admin" && m.role === "operator"));
+              const canEditThisMember = isAdmin && !isSelf;
 
               return (
                 <div
@@ -323,7 +426,7 @@ const MembersScreen = ({ onBack }) => {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: ROLE_COLORS[m.role],
+                      color: ROLE_COLORS[m.role] || "var(--primary)",
                       flexShrink: 0,
                     }}
                   >
@@ -338,19 +441,20 @@ const MembersScreen = ({ onBack }) => {
                         display: "flex",
                         alignItems: "center",
                         gap: "6px",
+                        color: "var(--text)",
                       }}
                     >
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {m.name || m.email}
                       </span>
                       {isSelf && (
-                        <span className="mono" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                        <span className="mono" style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
                           (você)
                         </span>
                       )}
                     </div>
                     {m.email && m.name && (
-                      <div className="mono" style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                      <div className="mono" style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                         {m.email}
                       </div>
                     )}
@@ -359,20 +463,19 @@ const MembersScreen = ({ onBack }) => {
                   {canEditThisMember ? (
                     <select
                       className="input"
-                      value={m.role}
+                      value={m.role === "owner" ? "admin" : m.role}
                       onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
                       style={{ width: "140px", fontSize: "12px", padding: "6px 10px" }}
                     >
                       <option value="operator">Operador</option>
                       <option value="admin">Administrador</option>
-                      {isOwner && <option value="owner">Dono</option>}
                     </select>
                   ) : (
                     <span
                       className="tag"
                       style={{
-                        color: ROLE_COLORS[m.role],
-                        borderColor: ROLE_COLORS[m.role],
+                        color: ROLE_COLORS[m.role] || "var(--primary)",
+                        borderColor: ROLE_COLORS[m.role] || "var(--primary)",
                         fontSize: "11px",
                       }}
                     >

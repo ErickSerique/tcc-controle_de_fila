@@ -2,7 +2,7 @@
  * routes/rooms.js
  *
  * REST API para salas de atendimento.
- * Suporta configuração avançada (guichês, batchSize, campos personalizados, trancamento).
+ * Suporta configuração avançada (guichês, prioridades em cascata, campos personalizados, trancamento e histórico permanente).
  */
 const express = require("express");
 const { body, param, validationResult } = require("express-validator");
@@ -18,6 +18,7 @@ const {
   listActiveRooms,
 } = require("../services/roomService");
 const { getArchive } = require("../services/queueService");
+const { pool } = require("../config/db");
 
 const router = express.Router();
 
@@ -29,11 +30,11 @@ const validate = (req, res, next) => {
 
 const codeParam = param("code").trim().isAlphanumeric().isLength({ min: 6, max: 6 });
 
-// ── POST /api/rooms — Criar sala ──────────────────────────────────
+// ── POST /api/rooms — Criar/Configurar nova sala (Apenas Admin) ────
 router.post(
   "/",
   requireAuth,
-  requireRole("operator"),
+  requireRole("admin"),
   createLimiter,
   [
     body("name").trim().isLength({ min: 3, max: 80 }).escape(),
@@ -44,11 +45,12 @@ router.post(
     body("counters").optional().isArray({ max: 20 }),
     body("customFields").optional().isArray({ max: 15 }),
     body("priorityBatchSize").optional().isInt({ min: 0, max: 50 }),
+    body("priorityRules").optional().isObject(),
   ],
   validate,
   (req, res) => {
     try {
-      const { name, categories, counters, customFields, priorityBatchSize } = req.body;
+      const { name, categories, counters, customFields, priorityBatchSize, priorityRules } = req.body;
       const room = createRoom({
         name,
         orgId: req.orgId,
@@ -57,8 +59,57 @@ router.post(
         counters,
         customFields,
         priorityBatchSize,
+        priorityRules,
         actor: { name: req.profile?.name || req.user.email, role: req.orgRole },
       });
+      res.status(201).json({ code: room.code, room });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+// ── POST /api/rooms/open-day — Abrir o dia a partir de sala salva ou direta (Operador ou Admin) ──
+router.post(
+  "/open-day",
+  requireAuth,
+  requireRole("operator"),
+  createLimiter,
+  async (req, res) => {
+    try {
+      const { savedRoomId, name, categories, counters, customFields, priorityRules } = req.body;
+      let roomConfig = { name, categories, counters, customFields, priorityRules };
+
+      if (savedRoomId) {
+        try {
+          const { rows } = await pool.query(
+            `SELECT * FROM saved_rooms WHERE id = $1 AND org_id = $2`,
+            [savedRoomId, req.orgId]
+          );
+          if (rows.length > 0) {
+            const sr = rows[0];
+            roomConfig = {
+              name: sr.name,
+              categories: typeof sr.categories === "string" ? JSON.parse(sr.categories) : sr.categories,
+              counters: typeof sr.counters === "string" ? JSON.parse(sr.counters) : sr.counters,
+              customFields: typeof sr.custom_fields === "string" ? JSON.parse(sr.custom_fields) : sr.custom_fields,
+              priorityRules: typeof sr.priority_rules === "string" ? JSON.parse(sr.priority_rules) : sr.priority_rules,
+            };
+          }
+        } catch {}
+      }
+
+      const room = createRoom({
+        name: roomConfig.name || "Atendimento do Dia",
+        orgId: req.orgId,
+        hostId: req.user.id,
+        categories: roomConfig.categories,
+        counters: roomConfig.counters,
+        customFields: roomConfig.customFields,
+        priorityRules: roomConfig.priorityRules,
+        actor: { name: req.profile?.name || req.user.email, role: req.orgRole },
+      });
+
       res.status(201).json({ code: room.code, room });
     } catch (err) {
       res.status(400).json({ error: err.message });
@@ -71,22 +122,30 @@ router.get("/org/active", requireAuth, requireRole("operator"), (req, res) => {
   res.json({ rooms: listActiveRooms(req.orgId) });
 });
 
-// ── GET /api/rooms/history & /api/rooms/meta/history ─────────────
-const handleHistory = (req, res) => {
-  const history = getHistory(req.orgId);
-  res.json({ history });
+// ── GET /api/rooms/history & /api/rooms/meta/history (Persistente no DB) ──
+const handleHistory = async (req, res) => {
+  try {
+    const history = await getHistory(req.orgId);
+    res.json({ history });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
 router.get("/history", requireAuth, requireRole("operator"), handleHistory);
 router.get("/meta/history", requireAuth, requireRole("operator"), handleHistory);
 
 // ── GET /api/rooms/history/:id & /api/rooms/meta/history/:id ─────
-const handleHistorySession = (req, res) => {
-  const session = getHistorySession(req.params.id);
-  if (!session || (session.orgId && session.orgId !== req.orgId)) {
-    return res.status(404).json({ error: "Sessão não encontrada." });
+const handleHistorySession = async (req, res) => {
+  try {
+    const session = await getHistorySession(req.params.id);
+    if (!session || (session.orgId && session.orgId !== req.orgId)) {
+      return res.status(404).json({ error: "Sessão não encontrada." });
+    }
+    res.json({ report: session, session });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  res.json({ report: session, session });
 };
 
 router.get("/history/:id", requireAuth, requireRole("operator"), handleHistorySession);
@@ -104,7 +163,7 @@ router.get("/:code", [codeParam], validate, (req, res) => {
     categories: room.categories,
     counters: room.counters,
     customFields: room.customFields,
-    queueLength: room.queue.length,
+    queueLength: room.queue.filter((t) => t.status === "waiting").length,
     active: room.active,
     locked: !!room.locked,
   });
@@ -120,7 +179,7 @@ router.get("/:code/archive", requireRoomStaff("operator"), [codeParam], validate
 });
 
 // ── GET /api/rooms/:code/logs — Logs de auditoria da sala ─────────
-router.get("/:code/logs", requireRoomStaff("admin"), [codeParam], validate, (req, res) => {
+router.get("/:code/logs", requireRoomStaff("operator"), [codeParam], validate, (req, res) => {
   res.json({ logs: req.room.logs || [] });
 });
 
@@ -143,10 +202,10 @@ router.patch(
   }
 );
 
-// ── POST /api/rooms/:code/close — Encerrar dia ────────────────────
-router.post("/:code/close", requireRoomStaff("operator"), [codeParam], validate, (req, res) => {
+// ── POST /api/rooms/:code/close — Encerrar dia (Persistente) ─────
+router.post("/:code/close", requireRoomStaff("operator"), [codeParam], validate, async (req, res) => {
   try {
-    const report = closeDay(req.params.code.toUpperCase(), req.actor);
+    const report = await closeDay(req.params.code.toUpperCase(), req.actor);
     const io = req.app.get("io");
     if (io) {
       io.to(req.params.code.toUpperCase()).emit("room_closed", {
