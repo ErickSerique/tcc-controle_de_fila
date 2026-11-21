@@ -30,6 +30,8 @@ import {
   Unlock,
   Building,
   UserCheck,
+  Users,
+  AlertCircle,
 } from "lucide-react";
 import socket from "../lib/socket";
 import { apiFetch } from "../lib/api";
@@ -73,6 +75,8 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
   const [counterClaims, setCounterClaims] = useState({});
   const [myCounter, setMyCounter] = useState(null); // { id, name }
   const [counterModalOpen, setCounterModalOpen] = useState(false);
+  const [occupiedNotice, setOccupiedNotice] = useState(null);
+  const [showOperatorsModal, setShowOperatorsModal] = useState(false);
 
   const [locked, setLocked] = useState(!!roomProp?.locked);
 
@@ -146,6 +150,9 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
       setMyCounter({ id: counterId, name: counterName });
       setCounterModalOpen(false);
     };
+    const handleCounterOccupied = ({ message }) => {
+      setOccupiedNotice(message);
+    };
     const handleSocketError = ({ message }) => setError(message);
 
     socket.on("queue_update", handleQueue);
@@ -154,6 +161,7 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
     socket.on("room_status", handleRoomStatus);
     socket.on("you_are", handleYouAre);
     socket.on("counter_claimed", handleCounterClaimed);
+    socket.on("counter_occupied", handleCounterOccupied);
     socket.on("error", handleSocketError);
 
     return () => {
@@ -164,6 +172,7 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
       socket.off("room_status", handleRoomStatus);
       socket.off("you_are", handleYouAre);
       socket.off("counter_claimed", handleCounterClaimed);
+      socket.off("counter_occupied", handleCounterOccupied);
       socket.off("error", handleSocketError);
     };
   }, [roomCode, user?.id]);
@@ -179,9 +188,11 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
 
   const callNext = () => {
     if (queue.length === 0 || callLoading) return;
-    if (counters.length > 1 && !myCounter) {
-      setCounterModalOpen(true);
-      setError("Escolha um guichê antes de chamar.");
+    if (!myCounter) {
+      if (counters.length > 1) {
+        setCounterModalOpen(true);
+      }
+      setError("Você não possui um guichê atribuído nesta sala para chamar clientes.");
       return;
     }
     setCallLoading(true);
@@ -190,9 +201,11 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
   };
 
   const callSpecificTicket = (token) => {
-    if (counters.length > 1 && !myCounter) {
-      setCounterModalOpen(true);
-      setError("Escolha um guichê antes de chamar.");
+    if (!myCounter) {
+      if (counters.length > 1) {
+        setCounterModalOpen(true);
+      }
+      setError("Você não possui um guichê atribuído nesta sala para chamar clientes.");
       return;
     }
     socket.emit("host:call_specific", { roomCode, token });
@@ -229,9 +242,11 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
   };
 
   const handleRecall = (token, mode, counter, category) => {
-    if (mode === "counter" && counters.length > 1 && !myCounter && !counter) {
-      setCounterModalOpen(true);
-      setError("Escolha um guichê antes de chamar.");
+    if (mode === "counter" && !myCounter && !counter) {
+      if (counters.length > 1) {
+        setCounterModalOpen(true);
+      }
+      setError("Você não possui um guichê atribuído nesta sala para chamar clientes.");
       return;
     }
     socket.emit("host:recall", {
@@ -341,6 +356,25 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
             >
               {staff.name} · {staff.role === "admin" || staff.role === "owner" ? "Admin" : "Operador"}
             </span>
+
+            {/* Contador de Operadores Ativos (Item 6) */}
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowOperatorsModal(true)}
+              style={{
+                padding: "4px 10px",
+                fontSize: "12px",
+                gap: "5px",
+                background: "var(--surface)",
+                borderColor: "var(--border)",
+                color: "var(--text)",
+                fontWeight: 600,
+              }}
+              title="Ver operadores e guichês ativos na sala"
+            >
+              <Users size={13} color="var(--primary)" />
+              <span>{Object.keys(counterClaims).length} operador{Object.keys(counterClaims).length !== 1 ? "es" : ""}</span>
+            </button>
 
             {/* Guichê Indicador / Seletor (Alta 5) */}
             {counters.length > 1 && (
@@ -465,6 +499,38 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
             <strong>Fila trancada:</strong> Novos clientes não podem entrar via aplicativo ou QR Code.
             Novas senhas manuais ainda podem ser inseridas pelo balcão.
           </div>
+        </div>
+      )}
+
+      {/* ── Aviso de Guichê Ocupado / Modo Visualizador (Prioridades 3 e 4) ── */}
+      {occupiedNotice && (
+        <div
+          className="animate-fade"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "10px",
+            background: "rgba(245, 158, 11, 0.12)",
+            border: "1px solid var(--warn)",
+            borderRadius: "8px",
+            padding: "12px 18px",
+            color: "var(--warn)",
+            fontSize: "13px",
+            marginBottom: "16px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <AlertCircle size={17} style={{ flexShrink: 0 }} />
+            <span>{occupiedNotice}</span>
+          </div>
+          <button
+            onClick={() => setOccupiedNotice(null)}
+            style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", padding: "4px" }}
+            title="Fechar aviso"
+          >
+            <X size={15} />
+          </button>
         </div>
       )}
 
@@ -997,6 +1063,76 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
         <button
           className="btn"
           onClick={() => setCounterModalOpen(false)}
+          style={{ width: "100%", padding: "10px", fontSize: "13px" }}
+        >
+          Fechar
+        </button>
+      </Modal>
+
+      {/* ── Modal: Operadores na Sala (Prioridade 6) ── */}
+      <Modal open={showOperatorsModal} onClose={() => setShowOperatorsModal(false)} maxWidth="480px">
+        <h3 style={{ marginBottom: "6px", fontSize: "17px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <Users size={18} color="var(--primary)" /> Operadores na Sala
+        </h3>
+        <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "18px" }}>
+          Visão geral de quem está conectado e atendendo nesta sessão ({Object.keys(counterClaims).length} operador{Object.keys(counterClaims).length !== 1 ? "es" : ""}).
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
+          {counters.map((c) => {
+            const claim = counterClaims[c.id];
+            const isMine = myCounter?.id === c.id;
+
+            return (
+              <div
+                key={c.id}
+                className="card"
+                style={{
+                  padding: "12px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  background: isMine
+                    ? "var(--accent-glow)"
+                    : claim
+                    ? "var(--surface)"
+                    : "var(--surface-hover)",
+                  borderColor: isMine ? "var(--accent)" : "var(--border)",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text)" }}>
+                    {c.name}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                    {claim ? (
+                      <span>
+                        Operado por: <strong style={{ color: "var(--text)" }}>{claim.name}</strong> {isMine ? "(você)" : ""}
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--text-dim)" }}>Guichê livre no momento</span>
+                    )}
+                  </div>
+                </div>
+
+                <span
+                  className="tag"
+                  style={{
+                    background: claim ? (isMine ? "var(--accent)" : "var(--primary-glow)") : "transparent",
+                    color: claim ? (isMine ? "#04141C" : "var(--primary)") : "var(--text-dim)",
+                    borderColor: claim ? (isMine ? "var(--accent)" : "var(--primary)") : "var(--border)",
+                  }}
+                >
+                  {claim ? (isMine ? "Seu Guichê" : "Em Atendimento") : "Disponível"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <button
+          className="btn"
+          onClick={() => setShowOperatorsModal(false)}
           style={{ width: "100%", padding: "10px", fontSize: "13px" }}
         >
           Fechar

@@ -401,108 +401,130 @@ const MembersScreen = ({ onBack }) => {
               Nenhum membro encontrado.
             </div>
           ) : (
-            members.map((m) => {
-              const isSelf = m.user_id === user?.id;
-              const canEditThisMember = isAdmin && !isSelf;
+            (() => {
+              const totalAdmins = members.filter((x) => x.role === "admin" || x.role === "owner").length;
 
-              return (
-                <div
-                  key={m.user_id}
-                  className="card"
-                  style={{
-                    padding: "14px 18px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "14px",
-                  }}
-                >
+              return members.map((m) => {
+                const isSelf = m.user_id === user?.id;
+                // Somente administradores podem trocar cargos
+                const canEditThisMember = isAdmin;
+                // O último administrador não pode rebaixar seu próprio cargo
+                const isOnlyAdminSelf = isSelf && (m.role === "admin" || m.role === "owner") && totalAdmins <= 1;
+
+                return (
                   <div
+                    key={m.user_id}
+                    className="card"
                     style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: "50%",
-                      background: "var(--surface)",
-                      border: "1px solid var(--border)",
+                      padding: "14px 18px",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      color: ROLE_COLORS[m.role] || "var(--primary)",
-                      flexShrink: 0,
+                      gap: "14px",
                     }}
                   >
-                    <Shield size={16} />
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                        fontWeight: 600,
-                        fontSize: "14px",
+                        width: 36,
+                        height: 36,
+                        borderRadius: "50%",
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
                         display: "flex",
                         alignItems: "center",
-                        gap: "6px",
-                        color: "var(--text)",
+                        justifyContent: "center",
+                        color: ROLE_COLORS[m.role] || "var(--primary)",
+                        flexShrink: 0,
                       }}
                     >
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {m.name || m.email}
-                      </span>
-                      {isSelf && (
-                        <span className="mono" style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                          (você)
+                      <Shield size={16} />
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: "14px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          color: "var(--text)",
+                        }}
+                      >
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {m.name || m.email}
                         </span>
+                        {isSelf && (
+                          <span className="mono" style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                            (você)
+                          </span>
+                        )}
+                      </div>
+                      {m.email && m.name && (
+                        <div className="mono" style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                          {m.email}
+                        </div>
                       )}
                     </div>
-                    {m.email && m.name && (
-                      <div className="mono" style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                        {m.email}
-                      </div>
+
+                    {canEditThisMember ? (
+                      isOnlyAdminSelf ? (
+                        <span
+                          className="tag"
+                          style={{
+                            color: "var(--primary)",
+                            borderColor: "var(--primary)",
+                            fontSize: "11px",
+                            padding: "6px 12px",
+                          }}
+                          title="Você é o único Administrador da instituição e não pode alterar o próprio cargo."
+                        >
+                          Administrador (Único)
+                        </span>
+                      ) : (
+                        <select
+                          className="input"
+                          value={m.role === "owner" ? "admin" : m.role}
+                          onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
+                          style={{ width: "140px", fontSize: "12px", padding: "6px 10px" }}
+                        >
+                          <option value="operator">Operador</option>
+                          <option value="admin">Administrador</option>
+                        </select>
+                      )
+                    ) : (
+                      <span
+                        className="tag"
+                        style={{
+                          color: ROLE_COLORS[m.role] || "var(--primary)",
+                          borderColor: ROLE_COLORS[m.role] || "var(--primary)",
+                          fontSize: "11px",
+                        }}
+                      >
+                        {ROLE_LABELS[m.role] || m.role}
+                      </span>
+                    )}
+
+                    {isAdmin && !isSelf && (
+                      <button
+                        className="btn"
+                        onClick={() => setRemoveTarget(m)}
+                        style={{
+                          padding: "8px",
+                          color: "var(--danger)",
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                        aria-label="Remover membro"
+                        title="Remover da organização"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     )}
                   </div>
-
-                  {canEditThisMember ? (
-                    <select
-                      className="input"
-                      value={m.role === "owner" ? "admin" : m.role}
-                      onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
-                      style={{ width: "140px", fontSize: "12px", padding: "6px 10px" }}
-                    >
-                      <option value="operator">Operador</option>
-                      <option value="admin">Administrador</option>
-                    </select>
-                  ) : (
-                    <span
-                      className="tag"
-                      style={{
-                        color: ROLE_COLORS[m.role] || "var(--primary)",
-                        borderColor: ROLE_COLORS[m.role] || "var(--primary)",
-                        fontSize: "11px",
-                      }}
-                    >
-                      {ROLE_LABELS[m.role] || m.role}
-                    </span>
-                  )}
-
-                  {canEditThisMember && (
-                    <button
-                      className="btn"
-                      onClick={() => setRemoveTarget(m)}
-                      style={{
-                        padding: "8px",
-                        color: "var(--danger)",
-                        background: "transparent",
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                      aria-label="Remover membro"
-                      title="Remover da organização"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              );
-            })
+                );
+              });
+            })()
           )}
         </div>
 

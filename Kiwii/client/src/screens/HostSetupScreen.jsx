@@ -19,7 +19,7 @@ import {
   Clock,
   Layers,
 } from "lucide-react";
-import { apiFetch, fetchQueueTemplate, saveQueueTemplate, createSavedRoom } from "../lib/api";
+import { apiFetch, fetchQueueTemplate, saveQueueTemplate, createSavedRoom, updateSavedRoom } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
 const PRIORITY_OPTIONS = [
@@ -54,16 +54,21 @@ const PriorityDot = ({ color }) => (
   />
 );
 
-const HostSetupScreen = ({ onRoomCreated, onBack }) => {
+const HostSetupScreen = ({ onRoomCreated, onBack, initialSavedRoom }) => {
   const { user, activeOrg } = useAuth();
   const operatorName = user?.profile?.name ?? user?.email ?? "";
 
-  const [roomName, setRoomName] = useState("");
-  const [highBatchSize, setHighBatchSize] = useState(3);
-  const [medBatchSize, setMedBatchSize] = useState(2);
-  const [saveAsPermanent, setSaveAsPermanent] = useState(true);
+  const [roomName, setRoomName] = useState(initialSavedRoom?.name || "");
+  const [highBatchSize, setHighBatchSize] = useState(
+    initialSavedRoom?.priority_rules?.highBatchSize ?? initialSavedRoom?.priorityRules?.highBatchSize ?? 3
+  );
+  const [medBatchSize, setMedBatchSize] = useState(
+    initialSavedRoom?.priority_rules?.medBatchSize ?? initialSavedRoom?.priorityRules?.medBatchSize ?? 2
+  );
+  const [saveAsPermanent, setSaveAsPermanent] = useState(!initialSavedRoom);
 
   const [categories, setCategories] = useState(() => {
+    if (initialSavedRoom?.categories?.length) return initialSavedRoom.categories;
     try {
       if (activeOrg?.id) {
         const saved = localStorage.getItem(`kiwii_org_template_${activeOrg.id}`);
@@ -77,10 +82,15 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
   });
   const [newCat, setNewCat] = useState({ name: "", priority: 2, tma: 5 });
 
-  const [counters, setCounters] = useState([{ id: genId(), name: "Guichê 1" }]);
+  const [counters, setCounters] = useState(() => {
+    if (initialSavedRoom?.counters?.length) return initialSavedRoom.counters;
+    return [{ id: genId(), name: "Guichê 1" }];
+  });
   const [newCounterName, setNewCounterName] = useState("");
 
-  const [customFields, setCustomFields] = useState([]);
+  const [customFields, setCustomFields] = useState(
+    initialSavedRoom?.custom_fields || initialSavedRoom?.customFields || []
+  );
   const [newField, setNewField] = useState({
     label: "",
     type: "text",
@@ -252,15 +262,25 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
     setLoading(true);
     setError("");
     try {
-      await createSavedRoom(activeOrg.id, {
+      const payload = {
         name: roomName.trim(),
         deskCount: counters.length,
         categories,
+        counters,
         customFields,
-        highBatchSize: Math.max(0, parseInt(highBatchSize, 10) || 0),
-        medBatchSize: Math.max(0, parseInt(medBatchSize, 10) || 0),
-      });
-      alert("Sala permanente salva com sucesso!");
+        priorityRules: {
+          highBatchSize: Math.max(0, parseInt(highBatchSize, 10) || 0),
+          medBatchSize: Math.max(0, parseInt(medBatchSize, 10) || 0),
+        },
+      };
+
+      if (initialSavedRoom?.id) {
+        await updateSavedRoom(activeOrg.id, initialSavedRoom.id, payload);
+        alert("Configurações da sala permanente atualizadas com sucesso!");
+      } else {
+        await createSavedRoom(activeOrg.id, payload);
+        alert("Sala permanente salva com sucesso!");
+      }
       onBack();
     } catch (err) {
       setError(err.message);
@@ -300,7 +320,9 @@ const HostSetupScreen = ({ onRoomCreated, onBack }) => {
               <ArrowLeft size={14} /> Voltar
             </button>
           </div>
-          <h1 style={{ fontSize: "1.5rem" }}>Configurar Sala</h1>
+          <h1 style={{ fontSize: "1.5rem" }}>
+            {initialSavedRoom ? "Editar Configurações da Sala" : "Configurar Sala"}
+          </h1>
           <p style={{ color: "var(--text-muted)", fontSize: "13px", marginTop: "4px" }}>
             Defina guichês, categorias, prioridades e dados exigidos dos clientes
           </p>

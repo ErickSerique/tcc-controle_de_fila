@@ -150,11 +150,19 @@ const listActiveRooms = (orgId) => {
   const result = [];
   for (const room of rooms.values()) {
     if (room.active && (!orgId || room.orgId === orgId)) {
+      const claims = Object.values(room.counterClaims || {});
+      const totalCounters = room.counters?.length || 1;
+      const occupiedCountersCount = claims.length;
+
       result.push({
         code: room.code,
         name: room.name,
         orgId: room.orgId,
         counters: room.counters,
+        totalCounters,
+        occupiedCountersCount,
+        occupiedBy: claims.map((c) => c.name),
+        isFull: occupiedCountersCount >= totalCounters,
         queueLength: room.queue.filter((t) => t.status === "waiting").length,
         inServiceLength: room.queue.filter((t) => t.status === "called").length,
         locked: !!room.locked,

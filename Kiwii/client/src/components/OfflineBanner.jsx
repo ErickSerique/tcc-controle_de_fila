@@ -4,13 +4,27 @@
  * Banner discreto que indica ao host que está operando em modo offline.
  * Exibido apenas quando isOffline = true no contexto de auth.
  */
+import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { WifiOff } from "lucide-react";
 
 const OfflineBanner = () => {
   const { isOffline } = useAuth();
+  const [isNetworkOffline, setIsNetworkOffline] = useState(!navigator.onLine);
 
-  if (!isOffline) return null;
+  useEffect(() => {
+    const handleOnline = () => setIsNetworkOffline(false);
+    const handleOffline = () => setIsNetworkOffline(true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // Só exibe se estiver operando em modo offline E a rede do dispositivo estiver realmente desconectada
+  if (!isOffline || !isNetworkOffline) return null;
 
   return (
     <div

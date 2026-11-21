@@ -197,6 +197,7 @@ const Router = () => {
     case "host-setup":
       return (
         <HostSetupScreen
+          initialSavedRoom={ctx.editSavedRoom}
           onRoomCreated={(code, room) => navigate("host-panel", { roomCode: code, room })}
           onBack={() => navigate("landing")}
         />

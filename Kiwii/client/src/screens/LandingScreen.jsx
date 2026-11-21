@@ -65,6 +65,7 @@ const LandingScreen = ({ onNavigate }) => {
   // Salas ativas da instituição (para entrar como guichê) - Priority 5
   const [activeRooms, setActiveRooms] = useState([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
+  const [roomWarning, setRoomWarning] = useState(null); // { title, message, roomCode }
 
   // Salas permanentes salvas (Modelos/Presets) e Solicitações de Entrada
   const [savedRooms, setSavedRooms] = useState([]);
@@ -874,7 +875,17 @@ const LandingScreen = ({ onNavigate }) => {
                       {sr.desk_count || 1} guichê(s) · {sr.categories?.length || 0} categoria(s)
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: "8px" }}>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    {["admin", "owner"].includes(activeOrg.role) && (
+                      <button
+                        onClick={() => onNavigate("host-setup", { editSavedRoom: sr })}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: "12px", gap: "4px" }}
+                        title="Configurar categorias, guichês e campos desta sala"
+                      >
+                        <Settings size={13} /> Configurar
+                      </button>
+                    )}
                     <button
                       onClick={() => handleOpenSavedRoom(sr)}
                       disabled={openingSavedRoomId === sr.id}
@@ -914,16 +925,35 @@ const LandingScreen = ({ onNavigate }) => {
                     <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--text)" }}>
                       {r.name} · <span className="mono" style={{ color: "var(--primary)" }}>{r.code}</span>
                     </div>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      {r.queueLength} cliente(s) na fila · {r.counters?.length || 1} guichê(s)
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      {r.queueLength} cliente(s) na fila · {r.totalCounters || r.counters?.length || 1} guichê(s)
+                      {r.occupiedCountersCount > 0 && (
+                        <span style={{ color: r.isFull ? "var(--warn)" : "var(--primary)", marginLeft: "6px" }}>
+                          · {r.occupiedCountersCount}/{r.totalCounters || r.counters?.length || 1} ocupado(s)
+                          {r.occupiedBy?.length > 0 ? ` (${r.occupiedBy.join(", ")})` : ""}
+                        </span>
+                      )}
                       {r.locked && <span style={{ color: "var(--danger)", marginLeft: "8px" }}>🔒 Trancada</span>}
                     </div>
                   </div>
                   <button
-                    onClick={() => onNavigate("host-panel", { roomCode: r.code })}
-                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      if (r.isFull) {
+                        const isSingle = (r.totalCounters || r.counters?.length || 1) === 1;
+                        setRoomWarning({
+                          title: isSingle ? "Guichê Já Ocupado" : "Capacidade Máxima Atingida",
+                          message: isSingle
+                            ? `O guichê desta sala já está sendo operado por ${r.occupiedBy?.[0] || "outro operador"}. Esta sala possui apenas 1 guichê para atendimento.`
+                            : `Todos os ${r.totalCounters} guichês desta sala já estão ocupados no momento (${r.occupiedBy?.join(", ")}).`,
+                          roomCode: r.code,
+                        });
+                        return;
+                      }
+                      onNavigate("host-panel", { roomCode: r.code });
+                    }}
+                    className={`btn ${r.isFull ? "btn-secondary" : "btn-primary"} btn-sm`}
                   >
-                    Entrar como Guichê
+                    {r.isFull ? "Acompanhar (Ocupada)" : "Entrar como Guichê"}
                   </button>
                 </div>
               ))}
@@ -931,6 +961,49 @@ const LandingScreen = ({ onNavigate }) => {
           </div>
         )}
       </div>
+
+      {/* ── Modal Alerta de Sala Ocupada (Prioridades 3 e 4) ── */}
+      <Modal open={!!roomWarning} onClose={() => setRoomWarning(null)} maxWidth="420px">
+        <div style={{ textAlign: "center", marginBottom: "14px" }}>
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "50%",
+              background: "var(--warn-glow)",
+              color: "var(--warn)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "10px",
+            }}
+          >
+            <AlertCircle size={22} />
+          </div>
+          <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: "var(--text)" }}>
+            {roomWarning?.title}
+          </h3>
+        </div>
+        <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: "20px", textAlign: "center" }}>
+          {roomWarning?.message}
+        </p>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button className="btn btn-secondary" onClick={() => setRoomWarning(null)} style={{ flex: 1 }}>
+            Voltar
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              const code = roomWarning?.roomCode;
+              setRoomWarning(null);
+              onNavigate("host-panel", { roomCode: code });
+            }}
+            style={{ flex: 1 }}
+          >
+            Entrar como Visualizador
+          </button>
+        </div>
+      </Modal>
 
       {/* ── Modal Criar Organização ── */}
       <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="400px">

@@ -141,7 +141,13 @@ const registerSocketHandlers = (io) => {
             socket.data.claimedCounterName = room.counters[0].name;
             broadcastCounters(io, code, room);
           } catch {
-            /* já em uso por outra aba — ok */
+            const currentClaim = room.counterClaims[room.counters[0].id];
+            socket.emit("counter_occupied", {
+              roomCode: code,
+              counterName: room.counters[0].name,
+              occupiedBy: currentClaim?.name || "outro operador",
+              message: `O guichê "${room.counters[0].name}" já está sendo operado por ${currentClaim?.name || "outro operador"}. Você está em modo somente visualização.`,
+            });
           }
         }
 
@@ -241,7 +247,18 @@ const registerSocketHandlers = (io) => {
       if (!(await ensureStaffActor(roomCode))) return;
       const code = activeRoomOrError(roomCode);
       if (!code) return;
-      const counter = socket.data.claimedCounterName || (getRoom(code)?.counters[0]?.name);
+
+      const room = getRoom(code);
+      if (room && room.counters.length === 1) {
+        const claim = room.counterClaims[room.counters[0].id];
+        if (claim && claim.socketId !== socket.id) {
+          return socket.emit("error", {
+            message: `O guichê desta sala está em uso por ${claim.name}. Você não pode chamar clientes sem um guichê próprio.`,
+          });
+        }
+      }
+
+      const counter = socket.data.claimedCounterName || (room?.counters[0]?.name);
       if (!counter)
         return socket.emit("error", { message: "Escolha um guichê antes de chamar o próximo." });
 
@@ -258,7 +275,18 @@ const registerSocketHandlers = (io) => {
       if (!(await ensureStaffActor(roomCode))) return;
       const code = activeRoomOrError(roomCode);
       if (!code) return;
-      const counter = socket.data.claimedCounterName || (getRoom(code)?.counters[0]?.name);
+
+      const room = getRoom(code);
+      if (room && room.counters.length === 1) {
+        const claim = room.counterClaims[room.counters[0].id];
+        if (claim && claim.socketId !== socket.id) {
+          return socket.emit("error", {
+            message: `O guichê desta sala está em uso por ${claim.name}. Você não pode chamar clientes sem um guichê próprio.`,
+          });
+        }
+      }
+
+      const counter = socket.data.claimedCounterName || (room?.counters[0]?.name);
       if (!counter) return socket.emit("error", { message: "Escolha um guichê antes de chamar." });
       try {
         const called = callSpecific(code, token, counter);
@@ -306,7 +334,18 @@ const registerSocketHandlers = (io) => {
       if (!(await ensureStaffActor(roomCode))) return;
       const code = activeRoomOrError(roomCode);
       if (!code) return;
-      const counter = socket.data.claimedCounterName || (getRoom(code)?.counters[0]?.name);
+
+      const room = getRoom(code);
+      if (mode === "counter" && room && room.counters.length === 1) {
+        const claim = room.counterClaims[room.counters[0].id];
+        if (claim && claim.socketId !== socket.id) {
+          return socket.emit("error", {
+            message: `O guichê desta sala está em uso por ${claim.name}. Você não pode chamar clientes sem um guichê próprio.`,
+          });
+        }
+      }
+
+      const counter = socket.data.claimedCounterName || (room?.counters[0]?.name);
       if (mode === "counter" && !counter)
         return socket.emit("error", { message: "Escolha um guichê antes de chamar." });
       try {
