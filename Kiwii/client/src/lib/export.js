@@ -30,7 +30,7 @@ export const exportToCSV = (report) => {
   const customLabels = referenceTicket?.customDataEntries?.map((e) => e.label) || [];
 
   const headers = [
-    "Token", "Nome", "Categoria", "Prioridade", "TMA (min)",
+    "Senha", "Nome", "Categoria", "Prioridade", "TMA (min)",
     "Status", "Guichê", "Entrou", "Chamado", "Espera Real (min)",
     ...customLabels,
   ];
@@ -49,7 +49,7 @@ export const exportToCSV = (report) => {
     );
 
     return [
-      t.token,
+      t.code || t.ticketNumber || t.token,
       t.name,
       t.category,
       priorityLabel,
@@ -86,7 +86,7 @@ export const exportToExcel = (report) => {
   const customLabels = referenceTicket?.customDataEntries?.map((e) => e.label) || [];
 
   const headers = [
-    "Token", "Nome", "Categoria", "Prioridade", "TMA (min)",
+    "Senha", "Nome", "Categoria", "Prioridade", "TMA (min)",
     "Status", "Guichê", "Entrada", "Chamado", "Concluído", "Espera Real (min)",
     ...customLabels,
   ];
@@ -106,7 +106,7 @@ export const exportToExcel = (report) => {
     );
 
     return [
-      t.token,
+      t.code || t.ticketNumber || t.token,
       t.name,
       t.category,
       priorityLabel,
@@ -186,7 +186,7 @@ export const exportToPDF = (report) => {
 
       return `
       <tr>
-        <td><strong>${t.token}</strong></td>
+        <td><strong>${t.code || t.ticketNumber || t.token}</strong></td>
         <td>${t.name}</td>
         <td>${t.category}</td>
         <td>${priorityLabel}</td>
@@ -278,7 +278,7 @@ export const exportToPDF = (report) => {
       <table>
         <thead>
           <tr>
-            <th>Token</th>
+            <th>Senha</th>
             <th>Nome</th>
             <th>Categoria</th>
             <th>Prioridade</th>

@@ -75,7 +75,14 @@ const MonitorScreen = ({ roomCode }) => {
               {callingNow.map((t) => (
                 <div key={t.token} className="card animate-glow" style={{ padding: "28px 32px", border: "2px solid var(--warn)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div className="display" style={{ fontSize: "34px", fontWeight: 800, color: "var(--text)" }}>{t.name}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      {(t.code || t.ticketNumber) && (
+                        <span className="mono" style={{ fontSize: "32px", fontWeight: 800, color: "var(--warn)" }}>
+                          #{t.code || t.ticketNumber}
+                        </span>
+                      )}
+                      <div className="display" style={{ fontSize: "34px", fontWeight: 800, color: "var(--text)" }}>{t.name}</div>
+                    </div>
                     <div style={{ fontSize: "16px", color: "var(--text-muted)", marginTop: "4px" }}>{t.category}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
@@ -105,7 +112,14 @@ const MonitorScreen = ({ roomCode }) => {
                     {t.position}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: "18px" }}>{t.name}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      {(t.code || t.ticketNumber) && (
+                        <span className="mono" style={{ fontSize: "16px", fontWeight: 700, color: "var(--accent)" }}>
+                          #{t.code || t.ticketNumber}
+                        </span>
+                      )}
+                      <div style={{ fontWeight: 700, fontSize: "18px" }}>{t.name}</div>
+                    </div>
                     <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>{t.category}</div>
                   </div>
                 </div>

@@ -98,17 +98,15 @@ const joinQueue = (roomCode, { name, category, manual = false, customData = {}, 
   );
   const effectivePriority = manualPriority ? manualPriority : autoPriority;
 
-  // Letra identificadora por prioridade: A = Alta (3), B = Média (2), C = Baixa (1)
-  const prefix = effectivePriority === 3 ? "A" : effectivePriority === 2 ? "B" : "C";
-  const samePriorityCount =
-    room.queue.filter((t) => t.priority === effectivePriority).length +
-    room.archive.filter((t) => t.priority === effectivePriority).length;
-  const code = `${prefix}${String(samePriorityCount + 1).padStart(3, "0")}`;
+  // Senha sequencial simples e limpa por sala (ex: "001", "002", "003"...)
+  const totalTicketsInRoom = (room.queue?.length || 0) + (room.archive?.length || 0) + 1;
+  const code = String(totalTicketsInRoom).padStart(3, "0");
 
   const ticket = {
     id: uuidv4(),
     token: uuidv4().replace(/-/g, "").slice(0, 16),
     code,
+    ticketNumber: code,
     name: cleanName,
     category: catConfig.name,
     priority: effectivePriority,

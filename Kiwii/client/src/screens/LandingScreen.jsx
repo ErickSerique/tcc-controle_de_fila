@@ -389,7 +389,7 @@ const LandingScreen = ({ onNavigate }) => {
                   gap: "6px",
                 }}
               >
-                <span>Senha #{activeTicketData.ticket.code}</span>
+                <span>Senha #{activeTicketData.ticket.code || activeTicketData.ticket.ticketNumber || "001"}</span>
                 {activeTicketData.ticket.isRecall && (
                   <span
                     className="tag"

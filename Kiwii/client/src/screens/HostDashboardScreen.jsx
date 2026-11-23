@@ -765,7 +765,7 @@ const HostDashboardScreen = ({ onBack }) => {
                         return (
                           <tr key={t.id || t.token || idx} style={{ borderBottom: "1px solid var(--border)" }}>
                             <td className="mono" style={{ padding: "8px 10px", fontWeight: 700, color: "var(--primary)" }}>
-                              #{t.token?.split("-").slice(-1)[0]?.toUpperCase() || t.token}
+                              #{t.code || t.ticketNumber || String(idx + 1).padStart(3, "0")}
                             </td>
                             <td style={{ padding: "8px 10px", fontWeight: 600 }}>{t.name}</td>
                             <td style={{ padding: "8px 10px" }}>{t.category}</td>

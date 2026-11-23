@@ -108,7 +108,7 @@ const registerSocketHandlers = (io) => {
     };
 
     // ── HOST: entra no canal com identidade REAL ────────────────
-    socket.on("host:join", async ({ roomCode }) => {
+    socket.on("host:join", async ({ roomCode, preferredCounterId }) => {
       try {
         const code = norm(roomCode);
         const room = getRoom(code);
@@ -148,6 +148,17 @@ const registerSocketHandlers = (io) => {
               occupiedBy: currentClaim?.name || "outro operador",
               message: `O guichê "${room.counters[0].name}" já está sendo operado por ${currentClaim?.name || "outro operador"}. Você está em modo somente visualização.`,
             });
+          }
+        } else if (preferredCounterId && room.counters.some((c) => c.id === preferredCounterId)) {
+          // Reivindica automaticamente o guichê anteriormente selecionado (persistência / reconexão)
+          try {
+            claimCounter(room, preferredCounterId, socket.id, socket.data.actor.name);
+            socket.data.claimedCounterId = preferredCounterId;
+            const c = room.counters.find((x) => x.id === preferredCounterId);
+            socket.data.claimedCounterName = c?.name || "Guichê";
+            broadcastCounters(io, code, room);
+          } catch {
+            /* se outro operador assumiu nesse meio tempo, o operador escolherá na modal */
           }
         }
 

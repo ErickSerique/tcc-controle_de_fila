@@ -73,7 +73,27 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
     roomProp?.counters?.length ? roomProp.counters : [{ id: "default", name: "Guichê Único" }]
   );
   const [counterClaims, setCounterClaims] = useState({});
-  const [myCounter, setMyCounter] = useState(null); // { id, name }
+
+  const getSavedCounter = () => {
+    try {
+      const raw = localStorage.getItem(`kiwii_counter_${roomCode}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const saveCounter = (counter) => {
+    try {
+      if (counter) {
+        localStorage.setItem(`kiwii_counter_${roomCode}`, JSON.stringify(counter));
+      } else {
+        localStorage.removeItem(`kiwii_counter_${roomCode}`);
+      }
+    } catch {}
+  };
+
+  const [myCounter, setMyCounter] = useState(() => getSavedCounter()); // { id, name }
   const [counterModalOpen, setCounterModalOpen] = useState(false);
   const [occupiedNotice, setOccupiedNotice] = useState(null);
   const [showOperatorsModal, setShowOperatorsModal] = useState(false);
@@ -120,7 +140,8 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
   useEffect(() => {
     const joinRoom = () => {
       if (!socket.auth?.token) return;
-      socket.emit("host:join", { roomCode });
+      const saved = getSavedCounter();
+      socket.emit("host:join", { roomCode, preferredCounterId: saved?.id });
     };
 
     if (socket.connected) joinRoom();
@@ -141,17 +162,31 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
     const handleYouAre = ({ counters: roomCounters, claimedCounterId, claimedCounterName }) => {
       if (roomCounters?.length) setCounters(roomCounters);
       if (claimedCounterId) {
-        setMyCounter({ id: claimedCounterId, name: claimedCounterName });
-      } else if (roomCounters?.length > 1) {
-        setCounterModalOpen(true);
+        const counterObj = { id: claimedCounterId, name: claimedCounterName };
+        setMyCounter(counterObj);
+        saveCounter(counterObj);
+        setCounterModalOpen(false);
+      } else {
+        const saved = getSavedCounter();
+        const stillValid = saved && roomCounters?.some((c) => c.id === saved.id);
+        if (stillValid) {
+          socket.emit("host:claim_counter", { roomCode, counterId: saved.id });
+        } else if (roomCounters?.length > 1) {
+          setCounterModalOpen(true);
+        }
       }
     };
     const handleCounterClaimed = ({ counterId, counterName }) => {
-      setMyCounter({ id: counterId, name: counterName });
+      const counterObj = { id: counterId, name: counterName };
+      setMyCounter(counterObj);
+      saveCounter(counterObj);
       setCounterModalOpen(false);
     };
     const handleCounterOccupied = ({ message }) => {
       setOccupiedNotice(message);
+      saveCounter(null);
+      setMyCounter(null);
+      setCounterModalOpen(true);
     };
     const handleSocketError = ({ message }) => setError(message);
 
@@ -763,7 +798,7 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
                           color: i === 0 ? "var(--accent)" : "var(--text-muted)",
                         }}
                       >
-                        {t.position}
+                        {t.code || t.ticketNumber ? `#${t.code || t.ticketNumber}` : t.position}
                       </span>
                     </td>
                     <td style={{ padding: "12px 14px" }}>
@@ -867,7 +902,14 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    {(t.code || t.ticketNumber) && (
+                      <span className="mono" style={{ fontSize: "14px", fontWeight: 700, color: "var(--info)" }}>
+                        #{t.code || t.ticketNumber}
+                      </span>
+                    )}
+                    <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</span>
+                  </div>
                   <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     {t.category} · {t.counter || "Balcão"}
                   </div>
@@ -950,7 +992,14 @@ const QueueManagementScreen = ({ roomCode, room: roomProp, onCloseDay, onBack })
                       }}
                     >
                       <td style={{ padding: "12px 14px" }}>
-                        <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          {(t.code || t.ticketNumber) && (
+                            <span className="mono" style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-muted)" }}>
+                              #{t.code || t.ticketNumber}
+                            </span>
+                          )}
+                          <span style={{ fontWeight: 600, fontSize: "14px" }}>{t.name}</span>
+                        </div>
                       </td>
                       <td style={{ padding: "12px 14px" }}>
                         <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{t.category}</span>

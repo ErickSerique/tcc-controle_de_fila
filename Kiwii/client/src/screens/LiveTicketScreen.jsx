@@ -379,7 +379,7 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
               marginBottom: "8px",
             }}
           >
-            #{ticket.ticketNumber}
+            #{ticket.code || ticket.ticketNumber || "001"}
           </div>
 
           <div style={{ fontSize: "16px", fontWeight: 600, marginBottom: "20px" }}>
@@ -522,7 +522,7 @@ const LiveTicketScreen = ({ ticket: initialTicket, room, onBack }) => {
               marginBottom: "8px",
             }}
           >
-            #{ticket.ticketNumber}
+            #{ticket.code || ticket.ticketNumber || "001"}
           </div>
           <div style={{ fontSize: "16px", fontWeight: 600 }}>{ticket.name}</div>
         </div>
