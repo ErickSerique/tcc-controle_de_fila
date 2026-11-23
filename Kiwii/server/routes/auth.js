@@ -14,6 +14,7 @@ const { body, validationResult } = require("express-validator");
 const { requireAuth, issueLocalSession } = require("../middleware/auth");
 const { pool } = require("../config/db");
 const orgService = require("../services/orgService");
+const userService = require("../services/userService");
 
 const router = express.Router();
 
@@ -25,31 +26,20 @@ const validate = (req, res, next) => {
 
 /**
  * POST /api/auth/profile
- * Cria ou atualiza o perfil do usuário após o primeiro login via Supabase.
- * O cliente deve chamar esta rota logo após autenticar.
+ * Cria ou atualiza o perfil do usuário após o primeiro login via Supabase ou nas configurações.
  */
 router.post(
   "/profile",
   requireAuth,
-  [body("name").trim().isLength({ min: 2, max: 120 }).escape()],
+  [body("name").trim().isLength({ min: 2, max: 120 })],
   validate,
   async (req, res) => {
     try {
-      const { rows } = await pool.query(
-        `INSERT INTO user_profiles (id, name, avatar_url)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (id) DO UPDATE
-           SET name = EXCLUDED.name,
-               avatar_url = COALESCE(EXCLUDED.avatar_url, user_profiles.avatar_url),
-               updated_at = NOW()
-         RETURNING *`,
-        [
-          req.user.id,
-          req.body.name,
-          req.user.user_metadata?.avatar_url ?? null,
-        ]
-      );
-      res.json({ profile: rows[0] });
+      const profile = await userService.updateProfile(req.user.id, {
+        name: req.body.name,
+        avatarUrl: req.body.avatarUrl ?? req.user.user_metadata?.avatar_url ?? null,
+      });
+      res.json({ profile });
     } catch (err) {
       console.error("[auth] profile upsert:", err.message);
       res.status(500).json({ error: "Erro ao salvar perfil." });
@@ -121,6 +111,20 @@ router.get("/my-invites", requireAuth, async (req, res) => {
     res.json({ invites });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/auth/account
+ * Exclui a conta do usuário autenticado e seus dados no banco e Supabase.
+ */
+router.delete("/account", requireAuth, async (req, res) => {
+  try {
+    await userService.deleteUserAccount(req.user.id);
+    res.json({ message: "Conta excluída com sucesso." });
+  } catch (err) {
+    console.error("[auth] delete account:", err.message);
+    res.status(400).json({ error: err.message });
   }
 });
 

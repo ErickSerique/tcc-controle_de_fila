@@ -79,6 +79,9 @@ export const fetchInviteInfo = (token) => apiFetch(`/api/orgs/invites/${token}`)
 
 export const fetchMyInvites = () => apiFetch("/api/auth/my-invites");
 
+export const deleteAccountApi = () =>
+  apiFetch("/api/auth/account", { method: "DELETE" });
+
 // ── Organizations ─────────────────────────────────────────────────
 export const createOrg = (name) =>
   apiFetch("/api/orgs", { method: "POST", body: JSON.stringify({ name }) });

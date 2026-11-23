@@ -28,6 +28,7 @@ import {
   RotateCcw,
   Bell,
   Trash2,
+  User,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
@@ -45,6 +46,7 @@ import {
 import socket from "../lib/socket";
 import ConfirmModal from "../components/ConfirmModal";
 import Modal from "../components/Modal";
+import ProfileModal from "../components/ProfileModal";
 
 const ROLE_LABELS = { owner: "Administrador", admin: "Administrador", operator: "Operador" };
 
@@ -75,6 +77,21 @@ const LandingScreen = ({ onNavigate }) => {
   // Convites pendentes por e-mail - Priority 7
   const [pendingInvites, setPendingInvites] = useState([]);
   const [acceptingToken, setAcceptingToken] = useState(null);
+
+  // Perfil do usuário e menu
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest("#user-profile-menu-container")) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [userMenuOpen]);
 
   // ── Ticket ativo do cliente (acompanhamento e recall no menu principal) (M1/M8) ──
   const [activeTicketData, setActiveTicketData] = useState(() => {
@@ -555,20 +572,163 @@ const LandingScreen = ({ onNavigate }) => {
           <div />
         )}
 
-        {/* Perfil & Sair */}
+        {/* Perfil & Menu do Usuário */}
         {user ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-              {user.profile?.name ?? user.email}
-            </span>
+          <div id="user-profile-menu-container" style={{ position: "relative" }}>
             <button
-              onClick={signOut}
+              onClick={() => setUserMenuOpen((prev) => !prev)}
               className="btn btn-secondary"
-              style={{ padding: "8px 12px", gap: "6px", fontSize: "13px" }}
-              title="Sair da conta"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "6px 12px 6px 8px",
+                borderRadius: "30px",
+                border: "1px solid var(--border)",
+                background: userMenuOpen ? "var(--surface-hover)" : "var(--surface)",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+              title="Menu de perfil e configurações"
             >
-              <LogOut size={14} /> Sair
+              <div
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "50%",
+                  background: "linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%)",
+                  color: "#03171F",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                }}
+              >
+                {(user.profile?.name || user.email || "U").trim()[0].toUpperCase()}
+              </div>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
+                {user.profile?.name ?? user.email.split("@")[0]}
+              </span>
+              <ChevronDown
+                size={14}
+                style={{
+                  color: "var(--text-muted)",
+                  transform: userMenuOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 0.2s ease",
+                }}
+              />
             </button>
+
+            {userMenuOpen && (
+              <div
+                className="card animate-fade"
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "calc(100% + 8px)",
+                  width: "240px",
+                  padding: "8px",
+                  zIndex: 100,
+                  boxShadow: "var(--shadow-lg)",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  borderRadius: "12px",
+                }}
+              >
+                {/* Cabeçalho do menu */}
+                <div style={{ padding: "8px 10px 10px", borderBottom: "1px solid var(--border)", marginBottom: "6px", textAlign: "left" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.profile?.name ?? "Usuário"}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.email}
+                  </div>
+                  {activeOrg && (
+                    <div style={{ marginTop: "6px" }}>
+                      <span className="tag" style={{ fontSize: "10px", padding: "2px 6px" }}>
+                        {activeOrg.name} · {ROLE_LABELS[activeOrg.role] || activeOrg.role}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Opções */}
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    setProfileModalOpen(true);
+                  }}
+                  className="btn"
+                  style={{
+                    width: "100%",
+                    justifyContent: "flex-start",
+                    padding: "8px 10px",
+                    border: "none",
+                    fontSize: "13px",
+                    gap: "8px",
+                    background: "transparent",
+                    color: "var(--text)",
+                    borderRadius: "6px",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <User size={15} color="var(--accent)" />
+                  <span>Meu Perfil & Conta</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    onNavigate("org-setup");
+                  }}
+                  className="btn"
+                  style={{
+                    width: "100%",
+                    justifyContent: "flex-start",
+                    padding: "8px 10px",
+                    border: "none",
+                    fontSize: "13px",
+                    gap: "8px",
+                    background: "transparent",
+                    color: "var(--text)",
+                    borderRadius: "6px",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <Building2 size={15} color="var(--primary)" />
+                  <span>Minhas Instituições</span>
+                </button>
+
+                <div style={{ height: "1px", background: "var(--border)", margin: "6px 0" }} />
+
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    signOut();
+                  }}
+                  className="btn"
+                  style={{
+                    width: "100%",
+                    justifyContent: "flex-start",
+                    padding: "8px 10px",
+                    border: "none",
+                    fontSize: "13px",
+                    gap: "8px",
+                    background: "transparent",
+                    color: "var(--danger)",
+                    borderRadius: "6px",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--danger-glow, rgba(239, 68, 68, 0.1))")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <LogOut size={15} />
+                  <span>Sair da Conta</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <button
@@ -1072,6 +1232,12 @@ const LandingScreen = ({ onNavigate }) => {
         danger
         onConfirm={handleDeleteOrg}
         onCancel={() => setDeleteConfirm(false)}
+      />
+
+      {/* Modal de Perfil e Personalização da Conta */}
+      <ProfileModal
+        open={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
       />
     </div>
   );

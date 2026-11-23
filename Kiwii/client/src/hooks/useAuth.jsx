@@ -19,6 +19,7 @@ import {
   saveLocalSession,
   clearLocalSession,
   getLocalSession,
+  deleteAccountApi,
 } from "../lib/api";
 import { connectWithAuth, connectAnonymous } from "../lib/socket";
 
@@ -216,6 +217,84 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateProfileName = async (newName) => {
+    setAuthError(null);
+    const trimmed = (newName || "").trim();
+    if (trimmed.length < 2) {
+      throw new Error("O nome deve ter no mínimo 2 caracteres.");
+    }
+    await syncProfile(trimmed);
+    try {
+      await supabase.auth.updateUser({ data: { full_name: trimmed } });
+    } catch (e) {
+      console.warn("[auth] updateUser Supabase metadata:", e.message);
+    }
+    setUser((prev) =>
+      prev
+        ? {
+            ...prev,
+            profile: {
+              ...(prev.profile || {}),
+              name: trimmed,
+            },
+          }
+        : prev
+    );
+    return true;
+  };
+
+  const changePassword = async (currentPassword, newPassword) => {
+    setAuthError(null);
+    if (!user?.email) throw new Error("Usuário não autenticado.");
+    if (isOffline) {
+      throw new Error("A alteração de senha requer conexão com a internet.");
+    }
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error("A nova senha deve ter no mínimo 6 caracteres.");
+    }
+    if (currentPassword === newPassword) {
+      throw new Error("A nova senha deve ser diferente da senha atual.");
+    }
+
+    // 1. Valida senha atual
+    const { error: verifyErr } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+    if (verifyErr) {
+      throw new Error("A senha atual informada está incorreta.");
+    }
+
+    // 2. Atualiza para nova senha
+    const { error: updateErr } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    if (updateErr) {
+      throw new Error(updateErr.message || "Erro ao atualizar senha.");
+    }
+    return true;
+  };
+
+  const deleteAccount = async (currentPassword) => {
+    setAuthError(null);
+    if (!user?.id) throw new Error("Usuário não autenticado.");
+
+    // Se estiver online com senha, valida antes
+    if (!isOffline && currentPassword && user.email) {
+      const { error: verifyErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (verifyErr) {
+        throw new Error("Senha incorreta. Confirmação de exclusão falhou.");
+      }
+    }
+
+    await deleteAccountApi();
+    await signOut();
+    return true;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -232,6 +311,9 @@ export const AuthProvider = ({ children }) => {
         signOut,
         switchOrg,
         refreshOrgs,
+        updateProfileName,
+        changePassword,
+        deleteAccount,
       }}
     >
       {children}
