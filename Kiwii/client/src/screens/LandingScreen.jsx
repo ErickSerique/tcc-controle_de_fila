@@ -867,6 +867,67 @@ const LandingScreen = ({ onNavigate }) => {
               <ChevronRight size={18} color="var(--text-dim)" />
             </button>
 
+            {/* Criar Sala / Login para Visitantes sem conta */}
+            {!user && (
+              <button
+                onClick={() => onNavigate("auth")}
+                className="card btn"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "20px 24px",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  border: "1.5px solid var(--accent)",
+                  background: "var(--accent-light)",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: "12px",
+                      background: "var(--accent-glow)",
+                      color: "var(--accent)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <DoorOpen size={22} />
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 700, fontSize: "16px", color: "var(--text)" }}>
+                        Para criar uma sala, faça Login
+                      </span>
+                      <span
+                        className="tag"
+                        style={{
+                          background: "var(--accent)",
+                          color: "#03171F",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                        }}
+                      >
+                        Acessar
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      Entre ou crie uma conta grátis para abrir salas e gerenciar atendimentos
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight size={18} color="var(--accent)" />
+              </button>
+            )}
+
             {/* Abrir Sala / Host */}
             {user && activeOrg && (
               <button
